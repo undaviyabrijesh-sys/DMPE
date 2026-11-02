@@ -73,6 +73,17 @@
 - All other tested confidence-gated variants were weaker (approximately 39%–44% correct share) or inactive due to insufficient validation signals.
 - Decision: no strategy is approved. The 15m/0.75x candidate is only a hypothesis to re-test in repeated walk-forward periods and a cost-aware simulator.
 
+## Milestone 5 — Execution-cost simulation
+- [x] Replay only out-of-sample walk-forward predictions against the original 1-minute candle history
+- [x] Enter at the next 1-minute candle open after feature availability
+- [x] Simulate horizon-aligned volatility barriers with conservative same-minute stop-first handling
+- [x] Model stop-market gaps at the worse bar open
+- [x] Include two-sided taker fees including published 18% GST and slippage sensitivity (0/1/2/5/10 bps per side)
+- [x] Report trade-by-trade P&L, fees, win rate, profit factor, expectancy and drawdown
+- [ ] Validate simulator results and the execution-cost artifact
+- [ ] Add funding settlement payments, verified spread/market-impact estimates and account-currency conversion
+- [ ] Test stability on further unseen forward data and block-bootstrap confidence intervals
+
 ## Next milestones
 1. Review the Stage 1 profile, especially large early traded-price outages and funding-rate interpretation.
 2. Reconstruct trade aggressor flow and order-book changes only after validating the live exchange event schema.
