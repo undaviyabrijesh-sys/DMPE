@@ -1,0 +1,62 @@
+name: DMPE Binance aggTrades monthly archive
+
+on:
+  workflow_dispatch:
+    inputs:
+      year:
+        description: "UTC archive year"
+        required: true
+        default: "2024"
+        type: string
+      month:
+        description: "UTC archive month (1-12)"
+        required: true
+        default: "1"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  download-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Check out DMPE
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Download and verify Binance USD-M BTCUSDT aggTrades
+        run: |
+          python scripts/download_binance_aggtrades.py \
+            --symbol BTCUSDT \
+            --year "${{ inputs.year }}" \
+            --month "${{ inputs.month }}" \
+            --output-dir binance_input
+
+      - name: Build 1-minute proxy flow features
+        run: |
+          python scripts/build_binance_flow_features.py \
+            --archive "binance_input/BTCUSDT-aggTrades-${{ inputs.year }}-$(printf '%02d' ${{ inputs.month }}).zip" \
+            --year "${{ inputs.year }}" \
+            --month "${{ inputs.month }}" \
+            --output-dir binance_output
+
+      - name: Upload verified source archive and derived features
+        uses: actions/upload-artifact@v4
+        with:
+          name: dmpe-binance-btcusdt-aggtrades-${{ inputs.year }}-${{ inputs.month }}
+          path: |
+            binance_input/
+            binance_output/
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 0
