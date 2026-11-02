@@ -53,7 +53,8 @@ class PreparedExecutionData:
     highs: np.ndarray
     lows: np.ndarray
     closes: np.ndarray
-    feature_volatility: dict[str, dict[pd.Timestamp, Any]]
+    feature_positions: dict[pd.Timestamp, int]
+    feature_volatility: dict[str, np.ndarray]
 
 
 def prepare_execution_data(
@@ -66,19 +67,20 @@ def prepare_execution_data(
     features["time"] = pd.to_datetime(features["time"], utc=True, errors="coerce")
     features = features.dropna(subset=["time"]).drop_duplicates("time").set_index("time").sort_index()
     price_index = prices.index
-    volatility_maps = {
-        column: features[column].to_dict()
+    volatility_arrays = {
+        column: features[column].to_numpy(dtype="float64")
         for column in VOL_COLUMNS.values()
         if column in features.columns
     }
     return PreparedExecutionData(
         price_positions={timestamp: idx for idx, timestamp in enumerate(price_index)},
+        feature_positions={timestamp: idx for idx, timestamp in enumerate(features.index)},
         times_ns=price_index.asi8,
         opens=prices["open"].to_numpy(dtype="float64"),
         highs=prices["high"].to_numpy(dtype="float64"),
         lows=prices["low"].to_numpy(dtype="float64"),
         closes=prices["close"].to_numpy(dtype="float64"),
-        feature_volatility=volatility_maps,
+        feature_volatility=volatility_arrays,
     )
 
 
@@ -173,6 +175,7 @@ def simulate_signal_set(
     except KeyError as exc:
         raise ValueError(f"Feature dataset is missing {volatility_column}.") from exc
     price_positions = prepared.price_positions
+    feature_positions = prepared.feature_positions
     times_ns = prepared.times_ns
     opens, highs = prepared.opens, prepared.highs
     lows, closes = prepared.lows, prepared.closes
@@ -191,8 +194,12 @@ def simulate_signal_set(
         if entry_position is None:
             skipped["missing_entry_candle"] = skipped.get("missing_entry_candle", 0) + 1
             continue
-        vol_pct = feature_volatility.get(signal_time)
-        if vol_pct is None or pd.isna(vol_pct) or not np.isfinite(float(vol_pct)) or float(vol_pct) <= 0:
+        feature_position = feature_positions.get(signal_time)
+        if feature_position is None:
+            skipped["missing_point_in_time_features"] = skipped.get("missing_point_in_time_features", 0) + 1
+            continue
+        vol_pct = feature_volatility[feature_position]
+        if pd.isna(vol_pct) or not np.isfinite(float(vol_pct)) or float(vol_pct) <= 0:
             skipped["invalid_volatility_scale"] = skipped.get("invalid_volatility_scale", 0) + 1
             continue
 
