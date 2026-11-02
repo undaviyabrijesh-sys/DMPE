@@ -21,6 +21,11 @@ DATA_ROOT = Path(os.getenv("DMPE_DATA_DIR", ROOT / "data" / "raw"))
 HISTORY_DIR = DATA_ROOT / "history"
 LIVE_DIR = DATA_ROOT / "live"
 METADATA_DIR = DATA_ROOT / "metadata"
+FEATURE_DIRS = [
+    Path(os.getenv("DMPE_FEATURE_DIR", ROOT / "stage1_output" / "processed")),
+    ROOT / "data" / "processed",
+    ROOT / "processed",
+]
 
 TF_SECONDS = {
     "1m": 60, "3m": 180, "5m": 300, "15m": 900, "30m": 1800,
@@ -283,6 +288,23 @@ def load_report(path: Path) -> Any:
         return None
 
 
+
+
+def discover_feature_dataset() -> tuple[Path | None, Path | None]:
+    for directory in FEATURE_DIRS:
+        data_path = directory / "dmpe_BTCUSD_1m_features.parquet"
+        schema_path = directory / "feature_schema.json"
+        if data_path.exists() and schema_path.exists():
+            return data_path, schema_path
+    return None, None
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def read_feature_columns(path_str: str, modified_ns: int, columns: tuple[str, ...]) -> pd.DataFrame:
+    del modified_ns
+    return pd.read_parquet(path_str, columns=["time", *columns])
+
+
 def main() -> None:
     st.title("DMPE Quant Desk")
     st.caption("Dynamic Market Prediction Engine · BTCUSD perpetual · research workspace")
@@ -352,7 +374,7 @@ def main() -> None:
     metrics = calculate_metrics(candles, timeframe)
     latest_time = candles["time"].iloc[-1]
     age_mins = max((datetime.now(timezone.utc) - latest_time.to_pydatetime()).total_seconds() / 60, 0)
-    tabs = st.tabs(["Market Desk", "Live Tape", "Data Quality", "Model & Algo"])
+    tabs = st.tabs(["Market Desk", "Live Tape", "Data Quality", "Feature Lab", "Model & Algo"])
 
     with tabs[0]:
         st.subheader(f"BTCUSD · {timeframe} · Market overview")
@@ -489,6 +511,94 @@ def main() -> None:
         })
 
     with tabs[3]:
+        st.subheader("Feature Lab · point-in-time data vs. future targets")
+        feature_path, schema_path = discover_feature_dataset()
+        if feature_path is None or schema_path is None:
+            st.info(
+                "No processed feature dataset found. Download the "
+                "dmpe-stage1-feature-engineering artifact and extract its processed/ "
+                "folder into stage1_output/processed (or set DMPE_FEATURE_DIR)."
+            )
+        else:
+            schema = load_report(schema_path)
+            if not schema:
+                st.error("Feature schema could not be read.")
+            else:
+                feature_names = schema.get("feature_columns", [])
+                label_names = schema.get("label_columns", [])
+                if not feature_names or not label_names:
+                    st.warning("The feature schema does not contain the expected feature/label contract.")
+                else:
+                    selectors = st.columns(2)
+                    selected_feature = selectors[0].selectbox(
+                        "Model input candidate (past/current data only)",
+                        feature_names, key="feature_lab_input",
+                    )
+                    selected_target = selectors[1].selectbox(
+                        "Research target (future data; never a model input)",
+                        label_names, key="feature_lab_target",
+                    )
+                    try:
+                        feature_view = read_feature_columns(
+                            str(feature_path), feature_path.stat().st_mtime_ns,
+                            (selected_feature, selected_target),
+                        )
+                        feature_values = pd.to_numeric(feature_view[selected_feature], errors="coerce")
+                        target_values = pd.to_numeric(feature_view[selected_target], errors="coerce")
+                        nonnull = feature_values.dropna()
+                        target_nonnull = target_values.dropna()
+                        f1, f2, f3, f4 = st.columns(4)
+                        f1.metric("Feature rows", f"{len(feature_view):,}")
+                        f2.metric("Feature null rate", f"{feature_values.isna().mean():.2%}")
+                        f3.metric("Target null rate", f"{target_values.isna().mean():.2%}")
+                        f4.metric("Feature observations", f"{len(nonnull):,}")
+
+                        st.markdown(f"**Feature: {selected_feature}**")
+                        if not nonnull.empty:
+                            stats = nonnull.describe(percentiles=[0.01, 0.25, 0.5, 0.75, 0.99])
+                            st.dataframe(stats.rename("value").to_frame(), use_container_width=True)
+                            plot_data = feature_view.loc[feature_values.notna(), ["time"]].copy()
+                            plot_data[selected_feature] = feature_values.loc[feature_values.notna()].to_numpy()
+                            if len(plot_data) > 6000:
+                                stride = max(len(plot_data) // 6000, 1)
+                                plot_data = plot_data.iloc[::stride]
+                            line = go.Figure(go.Scattergl(
+                                x=plot_data["time"], y=plot_data[selected_feature],
+                                mode="lines", name=selected_feature,
+                            ))
+                            line.update_layout(
+                                template="plotly_dark", height=360,
+                                margin={"l": 10, "r": 10, "t": 25, "b": 10},
+                                title=f"{selected_feature} · sampled time series",
+                            )
+                            st.plotly_chart(line, use_container_width=True)
+                            hist = go.Figure(go.Histogram(x=nonnull, nbinsx=70, name=selected_feature))
+                            hist.update_layout(
+                                template="plotly_dark", height=300,
+                                margin={"l": 10, "r": 10, "t": 25, "b": 10},
+                                title=f"{selected_feature} · distribution",
+                            )
+                            st.plotly_chart(hist, use_container_width=True)
+                        else:
+                            st.warning("The selected feature is entirely null in this dataset.")
+
+                        st.markdown(f"**Future target: {selected_target}**")
+                        if not target_nonnull.empty:
+                            target_stats = target_nonnull.describe(percentiles=[0.01, 0.25, 0.5, 0.75, 0.99])
+                            st.dataframe(target_stats.rename("value").to_frame(), use_container_width=True)
+                            st.caption(
+                                f"Positive: {(target_nonnull > 0).mean():.1%} · "
+                                f"Negative: {(target_nonnull < 0).mean():.1%} · "
+                                f"Exactly zero: {(target_nonnull == 0).mean():.1%}"
+                            )
+                        st.caption(
+                            "Future targets are outcomes for research evaluation only. They must be "
+                            "excluded from training features to avoid look-ahead leakage."
+                        )
+                    except Exception as exc:
+                        st.error(f"Could not read the selected feature columns: {exc}")
+
+    with tabs[4]:
         st.subheader("Model gate & algo desk readiness")
         gate = st.columns(3)
         gate[0].metric("Active model", "NOT REGISTERED")
