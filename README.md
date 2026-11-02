@@ -37,7 +37,7 @@ DMPE includes a local Streamlit research desk with:
 - Backfill report, candle audit and basic data-integrity panels.
 - An explicit model gate showing whether a validated model is registered.
 
-Extract the downloaded workflow artifact so its contents sit under this repository's `data/raw/` directory, then launch:
+Extract the historical backfill artifact so its `history/` and `metadata/` folders sit under this repository's `data/raw/` directory. To enable the Feature Lab, extract the Stage 1 artifact's `processed/` folder to `stage1_output/processed/` (or point `DMPE_FEATURE_DIR` at the extracted folder). Then launch:
 ```bash
 pip install -r requirements.txt
 streamlit run app.py
