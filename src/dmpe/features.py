@@ -142,6 +142,8 @@ def _regular_hourly(frame: pd.DataFrame | None, value_name: str) -> pd.DataFrame
     hourly = hourly.reindex(full_index)
     out = pd.DataFrame(index=full_index)
     out[value_name] = hourly["close"].astype(float)
+    if value_name == "open_interest":
+        out[value_name] = out[value_name].where(out[value_name] > 0)
     safe_lag = pd.Timedelta(hours=1, minutes=1)
     out["available_at"] = out.index + safe_lag
 
