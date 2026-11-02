@@ -1,7 +1,11 @@
+import sys
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 
-from scripts.evaluate_baselines import (
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+from evaluate_baselines import (
     _predict_direction,
     _signal_metrics,
     chronological_splits,
