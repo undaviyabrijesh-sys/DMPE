@@ -82,6 +82,19 @@ The output artifact `dmpe-baseline-evaluation` contains the JSON/CSV scorecard a
 
 This is only the first classification baseline. It is **not** a backtest of realized trading P&L and does not include fills, fees, spread, slippage, funding or execution latency. A model is not eligible for live signals merely because its classification metrics look promising. The next gate is a trade simulator with realistic execution assumptions and additional walk-forward periods.
 
+## Stage 3 — Repeated walk-forward confirmation
+
+Run **Actions → DMPE repeated walk-forward evaluation** after Stage 1 is complete. The default feature artifact source is run `41490148033`; choose the appropriate Stage 1 run ID when the feature dataset is rebuilt.
+
+This experiment evaluates the same regularized histogram-gradient-boosting baseline over four expanding-window folds. Each fold has a 60-day validation block and a following 60-day untouched test block. One full prediction horizon is purged/embargoed at each boundary. The model is fitted only on data before validation; its confidence threshold is selected on validation only; then the following test block is evaluated without tuning.
+
+Outputs:
+- `walk_forward_report.json`: fold-level and combined test metrics, class counts, threshold selections, confidence-gated signal rates and uncertainty intervals.
+- `walk_forward_summary.csv`: flattened variant/fold summary.
+- `walk_forward_test_signals.csv`: timestamps, predicted directions, true outcomes and class probabilities for test-period directional calls.
+
+This is a stronger confirmation than a single 70/15/15 holdout, but still not an execution backtest. Test windows are sequential, and later training folds may include earlier folds' already-observed test history. The report explicitly documents this. We must still test fee-aware fills, slippage, funding, market impact and block-bootstrap uncertainty before deciding whether any pattern is tradeable.
+
 ## Install locally
 Python 3.11+ recommended:
 ```bash
