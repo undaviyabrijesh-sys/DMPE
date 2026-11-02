@@ -131,6 +131,8 @@ def timeframe_from_name(filename: str) -> str:
 
 
 def pct_change_at(frame: pd.DataFrame, minutes: int, tf: str) -> float | None:
+    if minutes * 60 < TF_SECONDS[tf]:
+        return None
     bars = max(int(round(minutes * 60 / TF_SECONDS[tf])), 1)
     if len(frame) <= bars:
         return None
@@ -200,14 +202,27 @@ def read_jsonl_tail(path: Path, limit: int = 1500) -> list[dict[str, Any]]:
     if not path.exists():
         return []
     try:
-        with path.open("r", encoding="utf-8") as handle:
-            for line in handle:
-                try:
-                    item = json.loads(line)
-                    if isinstance(item, dict):
-                        rows.append(item)
-                except json.JSONDecodeError:
-                    continue
+        # Read backwards in blocks: daily live files can become large, and
+        # the UI refreshes this tail repeatedly.
+        with path.open("rb") as handle:
+            end = handle.seek(0, os.SEEK_END)
+            chunks = bytearray()
+            newline_count = 0
+            while end > 0 and newline_count <= limit:
+                size = min(65536, end)
+                end -= size
+                handle.seek(end)
+                block = handle.read(size)
+                chunks[:0] = block
+                newline_count += block.count(b"\\n")
+        lines = bytes(chunks).decode("utf-8", errors="replace").splitlines()[-limit:]
+        for line in lines:
+            try:
+                item = json.loads(line)
+                if isinstance(item, dict):
+                    rows.append(item)
+            except json.JSONDecodeError:
+                continue
     except OSError:
         return []
     return list(rows)
@@ -381,13 +396,19 @@ def main() -> None:
                     st.info("No JSONL events found yet. Start the public WebSocket recorder.")
                     return
                 events = [(record, unwrap_event(record)) for record in records]
-                c1, c2, c3 = st.columns(3)
+                c1, c2, c3, c4 = st.columns(4)
                 trade_events = [(r, e) for r, e in events if is_kind(e, ("trade",))]
                 book_events = [(r, e) for r, e in events if is_kind(e, ("ob_l2", "orderbook", "order_book"))]
                 mark_events = [(r, e) for r, e in events if is_kind(e, ("mark_price", "markprice"))]
                 c1.metric("Trades captured", f"{len(trade_events):,}")
                 c2.metric("Order-book updates", f"{len(book_events):,}")
                 c3.metric("Mark-price updates", f"{len(mark_events):,}")
+                mark_value = mark_events[-1][1].get("p") if mark_events else None
+                try:
+                    mark_value = float(mark_value) if mark_value is not None else None
+                except (TypeError, ValueError):
+                    mark_value = None
+                c4.metric("Latest mark price", "—" if mark_value is None else f"USD {mark_value:,.2f}")
                 st.caption(
                     f"Source: {newest_file.name if newest_file else 'unknown'} · "
                     f"latest received {records[-1].get('received_at', 'timestamp unavailable')} · "
