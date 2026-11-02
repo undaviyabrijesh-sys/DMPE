@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 from pathlib import Path
 import re
 import sys
@@ -49,14 +50,20 @@ def main() -> None:
         archive.unlink(missing_ok=True)
         raise SystemExit(f"SHA256 mismatch for {filename}: expected {expected}, got {digest}")
 
-    print({
+    manifest = {
         "symbol": symbol,
-        "archive": str(archive),
+        "market": "USD-M perpetual futures",
+        "archive": filename,
         "url": url,
         "sha256": digest,
         "bytes": archive.stat().st_size,
+        "checksum_url": checksum_url,
         "checksum_verified": True,
-    })
+    }
+    (out_dir / f"{filename}.manifest.json").write_text(
+        json.dumps(manifest, indent=2), encoding="utf-8"
+    )
+    print(manifest)
 
 
 if __name__ == "__main__":
