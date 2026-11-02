@@ -1,53 +1,57 @@
 # DMPE — Dynamic Market Prediction Engine
 
-Research-first BTC perpetual-futures market-data and prediction project. The first milestone is a reliable, auditable data pipeline. No order execution is included.
+Research-first BTC perpetual-futures market-data and prediction project. The priority is a reliable, auditable data pipeline. No order execution is included.
 
 ## Initial scope
-- Venue: Delta Exchange India
-- Initial contract: BTCUSD (verify product metadata before changing symbols)
-- Historical data: 1-minute OHLCV; optional mark, funding and OI series only where confirmed available
-- Live data: public trades, L2 order-book updates and 1-minute candles
-- Storage: Parquet (historical) and JSONL (raw live events)
-- Planned horizons: 15m, 1h and 3h
-- Planned signals: +1 long, 0 flat/exit, -1 short
+- Venue: Delta Exchange India; initial product: BTCUSD perpetual
+- Historical: BTCUSD 1m traded-price candles; MARK:BTCUSD 1m mark-price candles; FUNDING:BTCUSD and OI:BTCUSD at 1h where history is available
+- Live: trades, top-15 L2 order book, 1m candles, ticker (includes OI fields), mark price and funding rate
+- Storage: Parquet historical files and raw JSONL live events
+- Prediction horizons: 15m, 1h and 3h
+- Signal convention: +1 long, 0 flat/exit, -1 short
+
+## Historical backfill
+The initial automated GitHub Actions job requests **up to five years** of history and uploads the data as a workflow artifact. Actual coverage depends on what Delta returns for each series; the earliest available timestamps are recorded in the backfill report. The historical candles endpoint has a documented 2,000-candle response cap; the collector pages across time windows and uses a pause/retry policy.
+
+Run locally:
+```bash
+pip install -r requirements.txt
+python scripts/backfill_bundle.py --days 1825
+python scripts/audit_history.py --directory data/raw/history
+```
+
+## Live capture
+Run locally until interrupted:
+```bash
+python scripts/capture_live.py --symbol BTCUSD
+```
+Or start a finite capture in GitHub Actions from **Actions → DMPE live market-data capture → Run workflow** (1–120 minutes). The output is uploaded as an artifact. GitHub Actions is not a permanent WebSocket host; uninterrupted capture needs a VPS or another always-on service.
+
+Raw data are intentionally excluded from Git commits. Download the workflow artifacts from the repository's Actions page.
+
+## Install locally
+Python 3.11+ recommended:
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+PYTHONPATH=src pytest -q
+```
 
 ## Research safeguards
 1. Use chronological splits and walk-forward validation; never randomly shuffle time-series rows.
 2. Preserve raw events before feature engineering.
 3. Include fees, spread, slippage, funding and latency in evaluations.
 4. Probabilities are not guarantees; risk controls remain separate from the model.
-5. Never commit API keys, secrets, private fills or personal data. This bootstrap uses public endpoints only.
-
-## Install
-Python 3.11+ recommended.
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-## Historical candle backfill
-```bash
-python scripts/backfill_candles.py --symbol BTCUSD --resolution 1m --days 30
-```
-Optional API series may include MARK/FUNDING/OI-prefixed symbols, but availability must be checked for the product and date range.
-
-## Live public feed recorder
-```bash
-python scripts/capture_live.py --symbol BTCUSD
-```
-Records public trades, L2 and 1-minute candles to daily JSONL files. This is a foreground process; use a continuously running VPS/server for uninterrupted capture. GitHub Actions is not a persistent WebSocket host.
-
-## Validate a candle file
-```bash
-python scripts/validate_candles.py data/raw/candles/BTCUSD_1m.parquet
-```
+5. Never commit API keys, secrets, private fills or personal data. Current collectors use public endpoints only.
 
 ## Layout
 - `.github/workflows/tests.yml`: automated tests
-- `scripts/`: backfill, live capture and validation commands
-- `src/dmpe/`: Delta REST client and live recorder
+- `.github/workflows/historical-backfill.yml`: 5-year historical data job and artifact
+- `.github/workflows/live-capture.yml`: manually started finite live recorder
+- `scripts/`: backfill, live capture and quality audit
+- `src/dmpe/`: REST client and WebSocket recorder
 - `data/raw/`: local market data, intentionally excluded from Git
 
-## Current limitations
-This is a data-pipeline bootstrap, not a profitable trading system. REST candles are fetched in bounded windows. Live trade/order-book history starts only when recording begins. Historical tick/order-book depth and liquidation/positioning feeds require separate source research. No order execution is implemented.
+## Limitations
+Historical trades and historical order-book depth are not returned by the candle endpoint. The WebSocket recorder starts collecting those events only when it is running. Historical funding and OI symbols may have shorter coverage than price candles. The first backfill report will show which series were actually available. No model training or live trading is enabled.
