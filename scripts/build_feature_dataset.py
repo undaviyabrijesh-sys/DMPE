@@ -38,6 +38,11 @@ def main() -> None:
     features, feature_columns, label_columns = build_feature_frame(
         price, mark_frame=mark, funding_frame=funding, oi_frame=oi
     )
+    # Compact model inputs and forward labels without downcasting the retained
+    # raw OHLCV/source price columns.
+    for column in feature_columns + label_columns:
+        features[column] = pd.to_numeric(features[column], errors="coerce").astype("float32")
+
     output_path = output_dir / "dmpe_BTCUSD_1m_features.parquet"
     features.to_parquet(
         output_path, index=False, engine="pyarrow", compression="zstd", row_group_size=100_000
