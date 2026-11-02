@@ -50,6 +50,19 @@ jobs:
         env:
           DURATION_MINUTES: ${{ github.event.inputs.duration_minutes || '5' }}
         run: python scripts/capture_live.py --symbol BTCUSD --duration-minutes "$DURATION_MINUTES"
+      - name: Build live trade and order-book minute features
+        run: |
+          python scripts/build_live_orderflow_dataset.py \
+            --input-dir data/raw/live \
+            --output-dir orderflow_output/processed
+      - name: Upload derived live order-flow features
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dmpe-live-orderflow-${{ github.run_id }}
+          path: orderflow_output/
+          if-no-files-found: warn
+          retention-days: 30
       - name: Upload raw live events
         if: always()
         uses: actions/upload-artifact@v4
