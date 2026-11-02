@@ -195,3 +195,16 @@ python scripts/merge_binance_flow_features.py --feature-file stage1_output/proce
 **Important:** this is Binance aggressor-flow proxy data, not historical Delta order flow. BTC cross-venue price correlation does not guarantee that signed-flow features transfer to Delta. Binance aggTrades contain no historical L2 queue position and cannot calibrate Delta maker fills. Keep the Binance proxy and Delta live-flow columns distinct; only forward Delta capture can validate venue transfer and fill assumptions.
 
 The revised preregistration in `research/PREREGISTERED_ASYMMETRIC_EXPERIMENT.md` freezes exactly two confirmatory horizons: 1h and 3h, each with a 1R stop and 3R target. The 15m horizon is excluded. Existing inspected Stage 3/4 test blocks are disqualified; the prospective final holdout remains 2026-11-03 through 2027-01-02 UTC.
+
+
+## 24-month Binance proxy backfill
+
+The repository now includes `.github/workflows/binance-flow-backfill-24m.yml`, which downloads BTCUSDT USD-M aggTrades for **2024-11 through 2026-10** in monthly jobs (six at a time), verifies each monthly checksum, creates the predeclared 1m flow features, and combines the results only if the final minute grid is complete and gap-free. Monthly source ZIPs are discarded after processing in this bulk workflow to control artifact storage; the exact public archive URL, SHA-256, byte count and checksum provenance are retained per month. The single-month workflow remains available when an actual raw ZIP artifact is required.
+
+After the combined artifact is produced, join it to candle features using:
+```bash
+python scripts/merge_binance_flow_features.py \
+  --feature-file stage1_output/processed/dmpe_BTCUSD_1m_features.parquet \
+  --flow-file binance_BTCUSDT_aggtrade_flow_1m_2024-11_to_2026-10.parquet \
+  --output-dir binance_merged
+```
