@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 
-from dmpe.labels import add_barrier_labels
+from dmpe.labels import add_asymmetric_directional_labels, add_barrier_labels
 
 
 def make_barrier_frame(periods=24):
