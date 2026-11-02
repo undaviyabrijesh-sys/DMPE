@@ -1,6 +1,11 @@
 name: DMPE Binance aggTrades monthly archive
 
 on:
+  push:
+    paths:
+      - ".github/workflows/binance-aggtrades-monthly.yml"
+      - "scripts/download_binance_aggtrades.py"
+      - "scripts/build_binance_flow_features.py"
   workflow_dispatch:
     inputs:
       year:
@@ -16,6 +21,10 @@ on:
 
 permissions:
   contents: read
+
+env:
+  ARCHIVE_YEAR: ${{ inputs.year || '2024' }}
+  ARCHIVE_MONTH: ${{ inputs.month || '1' }}
 
 jobs:
   download-and-build:
@@ -38,22 +47,23 @@ jobs:
         run: |
           python scripts/download_binance_aggtrades.py \
             --symbol BTCUSDT \
-            --year "${{ inputs.year }}" \
-            --month "${{ inputs.month }}" \
+            --year "$ARCHIVE_YEAR" \
+            --month "$ARCHIVE_MONTH" \
             --output-dir binance_input
 
       - name: Build 1-minute proxy flow features
         run: |
+          MONTH_PADDED=$(printf '%02d' "$ARCHIVE_MONTH")
           python scripts/build_binance_flow_features.py \
-            --archive "binance_input/BTCUSDT-aggTrades-${{ inputs.year }}-$(printf '%02d' ${{ inputs.month }}).zip" \
-            --year "${{ inputs.year }}" \
-            --month "${{ inputs.month }}" \
+            --archive "binance_input/BTCUSDT-aggTrades-$ARCHIVE_YEAR-$MONTH_PADDED.zip" \
+            --year "$ARCHIVE_YEAR" \
+            --month "$ARCHIVE_MONTH" \
             --output-dir binance_output
 
       - name: Upload verified source archive and derived features
         uses: actions/upload-artifact@v4
         with:
-          name: dmpe-binance-btcusdt-aggtrades-${{ inputs.year }}-${{ inputs.month }}
+          name: dmpe-binance-btcusdt-aggtrades-${{ env.ARCHIVE_YEAR }}-${{ env.ARCHIVE_MONTH }}
           path: |
             binance_input/
             binance_output/
