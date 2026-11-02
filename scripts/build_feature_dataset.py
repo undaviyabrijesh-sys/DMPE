@@ -75,6 +75,11 @@ def main() -> None:
     schema = {
         "created_at_utc": pd.Timestamp.now(tz="UTC").isoformat(),
         "rows": int(len(features)),
+        "time_semantics": (
+            "The source exchange candle timestamp denotes minute OPEN. Feature rows are "
+            "timestamped at the completed candle CLOSE (source timestamp + 1 minute); "
+            "all features are available no earlier than this close timestamp."
+        ),
         "first_time_utc": pd.to_datetime(features["time"], utc=True).min().isoformat(),
         "last_time_utc": pd.to_datetime(features["time"], utc=True).max().isoformat(),
         "feature_count": len(feature_columns),
