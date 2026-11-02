@@ -30,7 +30,7 @@ def main() -> None:
     parser.add_argument("--output-dir", default="data/processed")
     parser.add_argument(
         "--barrier-multipliers", type=parse_multipliers, default=(0.75, 1.0, 1.5),
-        help="Symmetric upper/lower ATR(14) barrier multiples to evaluate.",
+        help="Symmetric upper/lower horizon-aligned realized-volatility multiples to evaluate.",
     )
     args = parser.parse_args()
 
@@ -88,13 +88,21 @@ def main() -> None:
             "Never include target_* columns in model inputs."
         ),
         "barrier_label_policy": (
-            "barrier_label_* is +1 when the symmetric upper ATR barrier is touched first, "
-            "-1 when the lower barrier is touched first, and 0 for no touch or same-minute "
+            "barrier_label_* is +1 when the symmetric upper horizon-aligned realized-volatility "
+            "barrier is touched first, -1 when the lower barrier is touched first, and 0 for no touch or same-minute "
             "ambiguous touch. The barrier_state_* diagnostic distinguishes these cases; "
             "state=2 is ambiguous and should be excluded from directional training."
         ),
         "barrier_configuration": {
-            "volatility_scale": "signal-time ATR(14) from 1-minute bars, in percent of close",
+            "volatility_scale": {
+                "15m": "realized_vol_15m_pct",
+                "1h": "realized_vol_60m_pct",
+                "3h": "realized_vol_180m_pct",
+            },
+            "volatility_scale_definition": (
+                "Trailing standard deviation of completed 1-minute log returns multiplied "
+                "by sqrt(window), expressed as percent; horizon aligned and known at signal time."
+            ),
             "horizons_minutes": {"15m": 15, "1h": 60, "3h": 180},
             "symmetric_multipliers": list(args.barrier_multipliers),
             "ambiguous_intraminute_order": "not guessed; state=2 and directional label=0",
