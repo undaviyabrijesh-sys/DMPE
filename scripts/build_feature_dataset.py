@@ -60,6 +60,7 @@ def main() -> None:
     features, asymmetric_labels, asymmetric_diagnostics, asymmetric_summary = (
         add_asymmetric_directional_labels(
             features,
+            horizons={"15m": 15, "1h": 60},
             stop_multipliers=(1.0,),
             target_multipliers=(3.0,),
         )
@@ -106,7 +107,7 @@ def main() -> None:
             "stop -1x; for short: target -3x, stop +1x. +1=target first, -1=stop first, "
             "0=neither touched, state=2=same-minute ambiguous (exclude), state=-2=invalid/incomplete. "
             "The long and short targets are independent binary prediction tasks; do not collapse "
-            "them into a single three-class label."
+            "them into a single three-class label. The preregistered experiment covers 15m and 1h only."
         ),
         "asymmetric_barrier_configuration": {
             "stop_multipliers": [1.0],
