@@ -146,6 +146,7 @@ def parse_book_event(event: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def _aggregate_trade_minute(events: list[dict[str, Any]]) -> dict[str, Any]:
+    events = sorted(events, key=lambda item: item["_time"])
     sizes = np.array([item["size"] for item in events], dtype="float64")
     prices = np.array([item["price"] for item in events], dtype="float64")
     sides = [item["aggressor_side"] for item in events]
