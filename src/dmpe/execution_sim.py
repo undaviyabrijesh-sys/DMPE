@@ -42,6 +42,46 @@ def _normalize_prices(frame: pd.DataFrame) -> pd.DataFrame:
     return out.set_index("time").sort_index()
 
 
+
+
+@dataclass(frozen=True)
+class PreparedExecutionData:
+    """Large static market arrays built once and reused across variants/cost scenarios."""
+    price_positions: dict[pd.Timestamp, int]
+    times_ns: np.ndarray
+    opens: np.ndarray
+    highs: np.ndarray
+    lows: np.ndarray
+    closes: np.ndarray
+    feature_volatility: dict[str, dict[pd.Timestamp, Any]]
+
+
+def prepare_execution_data(
+    price_frame: pd.DataFrame,
+    feature_frame: pd.DataFrame,
+) -> PreparedExecutionData:
+    """Normalize and index million-row source data once per simulation run."""
+    prices = _normalize_prices(price_frame)
+    features = feature_frame.copy()
+    features["time"] = pd.to_datetime(features["time"], utc=True, errors="coerce")
+    features = features.dropna(subset=["time"]).drop_duplicates("time").set_index("time").sort_index()
+    price_index = prices.index
+    volatility_maps = {
+        column: features[column].to_dict()
+        for column in VOL_COLUMNS.values()
+        if column in features.columns
+    }
+    return PreparedExecutionData(
+        price_positions={timestamp: idx for idx, timestamp in enumerate(price_index)},
+        times_ns=price_index.asi8,
+        opens=prices["open"].to_numpy(dtype="float64"),
+        highs=prices["high"].to_numpy(dtype="float64"),
+        lows=prices["low"].to_numpy(dtype="float64"),
+        closes=prices["close"].to_numpy(dtype="float64"),
+        feature_volatility=volatility_maps,
+    )
+
+
 def max_drawdown(values: pd.Series) -> float:
     if values.empty:
         return 0.0
@@ -96,6 +136,7 @@ def simulate_signal_set(
     price_frame: pd.DataFrame,
     feature_frame: pd.DataFrame,
     assumptions: ExecutionAssumptions,
+    _prepared: PreparedExecutionData | None = None,
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     """Simulate one horizon/barrier signal set with fixed size; use NumPy OHLC arrays."""
     if assumptions.taker_fee_bps_per_side_including_gst < 0:
@@ -108,10 +149,7 @@ def simulate_signal_set(
         empty = pd.DataFrame()
         return empty, {"input_signals": 0, "skipped": {}, **summarize_trades(empty)}
 
-    prices = _normalize_prices(price_frame)
-    features = feature_frame.copy()
-    features["time"] = pd.to_datetime(features["time"], utc=True, errors="coerce")
-    features = features.dropna(subset=["time"]).drop_duplicates("time").set_index("time").sort_index()
+    prepared = _prepared or prepare_execution_data(price_frame, feature_frame)
 
     horizon_name = str(signals["horizon"].iloc[0])
     if horizon_name not in HORIZONS or not signals["horizon"].eq(horizon_name).all():
@@ -130,14 +168,14 @@ def simulate_signal_set(
     slippage = assumptions.slippage_bps_per_side / 10_000.0
     btc_quantity = assumptions.lot_size_btc * assumptions.contracts
 
-    price_index = prices.index
-    price_positions = {timestamp: idx for idx, timestamp in enumerate(price_index)}
-    times_ns = price_index.asi8
-    opens = prices["open"].to_numpy(dtype="float64")
-    highs = prices["high"].to_numpy(dtype="float64")
-    lows = prices["low"].to_numpy(dtype="float64")
-    closes = prices["close"].to_numpy(dtype="float64")
-    feature_volatility = features[volatility_column].to_dict()
+    try:
+        feature_volatility = prepared.feature_volatility[volatility_column]
+    except KeyError as exc:
+        raise ValueError(f"Feature dataset is missing {volatility_column}.") from exc
+    price_positions = prepared.price_positions
+    times_ns = prepared.times_ns
+    opens, highs = prepared.opens, prepared.highs
+    lows, closes = prepared.lows, prepared.closes
 
     rows: list[dict[str, Any]] = []
     skipped: dict[str, int] = {}
@@ -281,6 +319,8 @@ def run_slippage_sensitivity(
     """Evaluate every model/horizon/barrier separately across slippage scenarios."""
     summaries = []
     all_trades = []
+    # Reuse the large 1.5M-row timestamp maps and OHLC arrays across all scenarios.
+    prepared = prepare_execution_data(price_frame, feature_frame)
     variants = signals_frame.groupby(["horizon", "barrier_multiple"], sort=True)
     for (horizon, multiplier), variant_signals in variants:
         for slip in slippage_scenarios_bps:
@@ -291,7 +331,7 @@ def run_slippage_sensitivity(
                 contracts=contracts,
             )
             trades, summary = simulate_signal_set(
-                variant_signals, price_frame, feature_frame, assumptions
+                variant_signals, price_frame, feature_frame, assumptions, _prepared=prepared
             )
             summary.update({
                 "horizon": horizon,
