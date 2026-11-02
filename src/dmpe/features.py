@@ -271,7 +271,7 @@ def build_feature_frame(
             features.append(col)
 
     labels: list[str] = []
-    future_valid = one_min_log_return.notna().astype("int8").shift(-1)
+    future_valid = one_min_log_return.notna().astype("int8")
     for label, horizon in HORIZONS_MINUTES.items():
         future_log_return = _rolling_forward(one_min_log_return, horizon, "sum")
         valid_count = _rolling_forward(future_valid, horizon, "sum")
