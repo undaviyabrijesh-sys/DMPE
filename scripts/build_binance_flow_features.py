@@ -23,7 +23,7 @@ def load_aggregate_minutes(archive: Path, chunksize: int = 1_000_000) -> pd.Data
         if len(csv_names) != 1:
             raise ValueError(f"Expected exactly one CSV in {archive.name}; found {csv_names}")
         with zipped.open(csv_names[0]) as stream:
-            for chunk in pd.read_csv(stream, header=None, names=COLUMNS, chunksize=chunksize):
+            for chunk in pd.read_csv(stream, header=None, names=COLUMNS, dtype=str, chunksize=chunksize):
                 chunk["price"] = pd.to_numeric(chunk["price"], errors="coerce")
                 chunk["quantity"] = pd.to_numeric(chunk["quantity"], errors="coerce")
                 chunk["timestamp_ms"] = pd.to_numeric(chunk["timestamp_ms"], errors="coerce")
