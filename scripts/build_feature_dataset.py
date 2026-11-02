@@ -1,4 +1,4 @@
-"""Build a DMPE first-pass 1-minute feature and research-target dataset."""
+"""Build a DMPE 1-minute feature, continuous-target and barrier-label dataset."""
 from __future__ import annotations
 
 import argparse
@@ -11,12 +11,27 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 from dmpe.features import build_feature_frame  # noqa: E402
+from dmpe.labels import add_barrier_labels  # noqa: E402
+
+
+def parse_multipliers(value: str) -> tuple[float, ...]:
+    try:
+        values = tuple(float(token.strip()) for token in value.split(",") if token.strip())
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("Use comma-separated positive numbers.") from exc
+    if not values or any(not (number > 0) for number in values):
+        raise argparse.ArgumentTypeError("Barrier multipliers must be positive.")
+    return values
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Build DMPE 1m feature and label dataset")
     parser.add_argument("--input-dir", default="data/raw/history")
     parser.add_argument("--output-dir", default="data/processed")
+    parser.add_argument(
+        "--barrier-multipliers", type=parse_multipliers, default=(0.75, 1.0, 1.5),
+        help="Symmetric upper/lower ATR(14) barrier multiples to evaluate.",
+    )
     args = parser.parse_args()
 
     input_dir = Path(args.input_dir)
@@ -38,10 +53,19 @@ def main() -> None:
     features, feature_columns, label_columns = build_feature_frame(
         price, mark_frame=mark, funding_frame=funding, oi_frame=oi
     )
-    # Compact model inputs and forward labels without downcasting the retained
-    # raw OHLCV/source price columns.
+    features, barrier_labels, diagnostic_columns, barrier_summary = add_barrier_labels(
+        features, multipliers=args.barrier_multipliers
+    )
+    label_columns.extend(barrier_labels)
+
+    # Compact model inputs and targets without downcasting retained raw OHLCV.
     for column in feature_columns + label_columns:
         features[column] = pd.to_numeric(features[column], errors="coerce").astype("float32")
+    for column in diagnostic_columns:
+        if column.startswith("barrier_state_"):
+            features[column] = features[column].astype("int8")
+        else:
+            features[column] = pd.to_numeric(features[column], errors="coerce").astype("float32")
 
     output_path = output_dir / "dmpe_BTCUSD_1m_features.parquet"
     features.to_parquet(
@@ -57,16 +81,31 @@ def main() -> None:
         "feature_columns": feature_columns,
         "label_count": len(label_columns),
         "label_columns": label_columns,
-        "label_policy": (
-            "Forward return and future max excursion columns are evaluation targets only. "
+        "diagnostic_count": len(diagnostic_columns),
+        "diagnostic_columns": diagnostic_columns,
+        "continuous_label_policy": (
+            "Forward return and future max/min excursion columns are evaluation targets only. "
             "Never include target_* columns in model inputs."
         ),
+        "barrier_label_policy": (
+            "barrier_label_* is +1 when the symmetric upper ATR barrier is touched first, "
+            "-1 when the lower barrier is touched first, and 0 for no touch or same-minute "
+            "ambiguous touch. The barrier_state_* diagnostic distinguishes these cases; "
+            "state=2 is ambiguous and should be excluded from directional training."
+        ),
+        "barrier_configuration": {
+            "volatility_scale": "signal-time ATR(14) from 1-minute bars, in percent of close",
+            "horizons_minutes": {"15m": 15, "1h": 60, "3h": 180},
+            "symmetric_multipliers": list(args.barrier_multipliers),
+            "ambiguous_intraminute_order": "not guessed; state=2 and directional label=0",
+        },
         "hourly_data_availability": (
             "Funding and OI values become eligible only after source timestamp + 1h 1m."
         ),
         "gap_policy": (
             "Minute grid is explicit; OHLCV is not forward-filled. Rolling descriptors require "
-            "complete windows. Forward labels are null if any future one-minute return is missing."
+            "complete lookback windows. Continuous labels and barrier labels are null when "
+            "their required future window crosses a missing candle."
         ),
         "data_sources": {
             "traded_price": str(price_path),
@@ -81,7 +120,9 @@ def main() -> None:
         "rows": int(len(features)),
         "features": len(feature_columns),
         "labels": len(label_columns),
+        "diagnostics": len(diagnostic_columns),
         "output_file": str(output_path),
+        "barrier_class_counts": barrier_summary,
         "null_rates": {
             col: float(features[col].isna().mean())
             for col in feature_columns + label_columns
