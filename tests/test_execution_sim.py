@@ -82,3 +82,19 @@ def test_trade_is_skipped_if_any_minute_in_holding_window_is_missing():
     trades, report = simulate_signal_set(signals, prices, features, ExecutionAssumptions())
     assert trades.empty
     assert report["skipped"]["incomplete_future_price_window"] == 1
+
+
+def test_barriers_are_anchored_to_completed_signal_close_not_gapped_entry_open():
+    signals, prices, features = make_inputs()
+    # A gap-up entry should not silently move the model's predeclared barriers.
+    prices.loc[0, ["open", "high", "low", "close"]] = [100.50, 100.55, 100.45, 100.50]
+    features.loc[0, "close"] = 100.0
+    trades, _ = simulate_signal_set(
+        signals, prices, features,
+        ExecutionAssumptions(taker_fee_bps_per_side_including_gst=0.0, slippage_bps_per_side=0.0),
+    )
+    trade = trades.iloc[0]
+    assert trade["signal_close_reference_price"] == 100.0
+    assert trade["raw_entry_price"] == 100.5
+    assert trade["target_price"] == 100.2
+    assert trade["exit_reason"] == "target"
