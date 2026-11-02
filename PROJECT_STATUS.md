@@ -103,6 +103,21 @@
 - Increasing assumed slippage made all results worse. Funding, market impact, queue position, INR conversion, leverage/liquidation and portfolio-level overlapping-position constraints are not yet modelled.
 - Interpretation: no current model/threshold is suitable for paper trading, let alone live orders. These figures are an initial diagnostic, not a deployable backtest. The next work is to audit the execution/label alignment and build a portfolio-level simulator with verified funding and spread/impact before attempting new features or model tuning.
 
+## Execution/label alignment audit and next experiment (2026-11-02)
+
+- [x] Audited the time convention: feature rows are timestamped at completed candle close; the same timestamp maps to the next 1m candle open for simulated entry. Label windows and simulator windows both begin with that next minute.
+- [x] Found and corrected a barrier-reference mismatch: symmetric labels are anchored to the completed signal candle close, but the original execution simulator had re-anchored barriers to the next candle's open/fill. The simulator now retains the signal-close reference for barrier geometry while entry gaps/slippage affect realized P&L. Added a regression test.
+- [x] Added separate asymmetric long and short first-touch labels for 15m and 1h: 1x horizon-RV stop / 3x target. Target-first=+1, stop-first=-1, no-touch=0; same-minute ambiguity=state 2 and excluded; incomplete windows=state -2. Separate long/short targets must remain separate prediction tasks.
+- [x] Added a frozen experiment specification in `research/PREREGISTERED_ASYMMETRIC_EXPERIMENT.md`. Only 15m and 1h are confirmatory variants; 3h and extra RR grids are not to be searched on the final holdout.
+- [x] Added extraction of live funding snapshots with Delta's exact `next_funding_realization` timestamp and rate. This is observation capture only; funding P&L is not yet charged until the cashflow convention is validated.
+- [x] Added a hardened systemd service and setup guide for an always-on public-data recorder in `deploy/vps/`. The VPS itself has not been provisioned.
+- [ ] Complete binary long/short model training, validation-only expected-value thresholding, and asymmetric maker-entry / taker-stop replay.
+- [ ] Calibrate maker fill/no-fill and adverse selection from multiple weeks of actual L2/trade captures; no candle-only touch may be treated as guaranteed maker fill.
+- [ ] Reconcile funding snapshots against actual funding transaction/realization records before charging funding in replay.
+- [ ] Add block-bootstrap confidence intervals, family-wise multiple-testing correction, and predeclared trend/range/volatility regime reports.
+- [ ] Reserve prospective final holdout data from 2026-11-03 through 2027-01-02 UTC; previously inspected Stage 3/4 test windows are not eligible as the final holdout.
+- [ ] After all research gates pass, run 4–8 weeks of paper observation with a kill switch and no real orders.
+
 ## Next milestones
 1. Review the Stage 1 profile, especially large early traded-price outages and funding-rate interpretation.
 2. Reconstruct trade aggressor flow and order-book changes only after validating the live exchange event schema.
