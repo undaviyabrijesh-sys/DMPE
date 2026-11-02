@@ -215,6 +215,10 @@ def build_feature_frame(
     bars and are returned separately in the label-column list.
     """
     price = normalize_ohlcv(price_frame)
+    # Delta's candle timestamp is the minute OPEN. Features contain that bar's
+    # completed OHLCV, so the point-in-time observation timestamp is its CLOSE.
+    # This prevents a model from seeing the candle high/low/close at its open.
+    price["time"] = price["time"] + pd.Timedelta(minutes=1)
     minute_index = pd.date_range(
         price["time"].iloc[0], price["time"].iloc[-1], freq="1min", tz="UTC"
     )
@@ -277,6 +281,8 @@ def build_feature_frame(
 
     if mark_frame is not None and not mark_frame.empty:
         mark = normalize_ohlcv(mark_frame)[["time", "close"]].rename(columns={"close": "mark_close"})
+        # Match mark and traded-price candles by their close/availability times.
+        mark["time"] = mark["time"] + pd.Timedelta(minutes=1)
         base = base.merge(mark, on="time", how="left", validate="one_to_one")
         mark_log = np.log(base["mark_close"].where(base["mark_close"] > 0))
         base["mark_basis_pct"] = (base["mark_close"] / base["close"] - 1.0) * 100.0
