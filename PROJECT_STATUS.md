@@ -107,11 +107,13 @@
 
 - [x] Audited the time convention: feature rows are timestamped at completed candle close; the same timestamp maps to the next 1m candle open for simulated entry. Label windows and simulator windows both begin with that next minute.
 - [x] Found and corrected a barrier-reference mismatch: symmetric labels are anchored to the completed signal candle close, but the original execution simulator had re-anchored barriers to the next candle's open/fill. The simulator now retains the signal-close reference for barrier geometry while entry gaps/slippage affect realized P&L. Added a regression test.
-- [x] Added separate asymmetric long and short first-touch labels for 15m and 1h: 1x horizon-RV stop / 3x target. Target-first=+1, stop-first=-1, no-touch=0; same-minute ambiguity=state 2 and excluded; incomplete windows=state -2. Separate long/short targets must remain separate prediction tasks.
+- [x] Added separate asymmetric long and short first-touch reference labels for 15m and 1h: 1x horizon-RV stop / 3x target. Stage 1 run 41508187531 built the labels successfully (artifact 13172261495). Target-first=+1, stop-first=-1, no-touch=0; same-minute ambiguity=state 2 and excluded; incomplete windows=state -2. These are signal-close labels, not yet maker-fill-conditioned targets.
 - [x] Added a frozen experiment specification in `research/PREREGISTERED_ASYMMETRIC_EXPERIMENT.md`. Only 15m and 1h are confirmatory variants; 3h and extra RR grids are not to be searched on the final holdout.
-- [x] Added extraction of live funding snapshots with Delta's exact `next_funding_realization` timestamp and rate. This is observation capture only; funding P&L is not yet charged until the cashflow convention is validated.
+- [x] Added extraction of live funding snapshots with Delta's exact `next_funding_realization` timestamp and rate. Live order-flow feature build run 41508345064 succeeded. This is observation capture only; funding P&L is not yet charged until the cashflow convention is validated.
+- [x] Added exact-time order-flow feature join with no as-of carry-forward, plus 5m/15m trailing descriptors and feed coverage fields.
+- [x] Added regression tests for the signal-close barrier anchor, asymmetric target/stop labels, funding snapshot timestamps and point-in-time order-flow join; latest test run 41508618604 passed.
 - [x] Added a hardened systemd service and setup guide for an always-on public-data recorder in `deploy/vps/`. The VPS itself has not been provisioned.
-- [ ] Complete binary long/short model training, validation-only expected-value thresholding, and asymmetric maker-entry / taker-stop replay.
+- [ ] Complete binary long/short model training, validation-only expected-value thresholding, and asymmetric maker-entry / taker-stop replay. Labels must be fill-conditioned before this is treated as a final trading model.
 - [ ] Calibrate maker fill/no-fill and adverse selection from multiple weeks of actual L2/trade captures; no candle-only touch may be treated as guaranteed maker fill.
 - [ ] Reconcile funding snapshots against actual funding transaction/realization records before charging funding in replay.
 - [ ] Add block-bootstrap confidence intervals, family-wise multiple-testing correction, and predeclared trend/range/volatility regime reports.
@@ -119,12 +121,12 @@
 - [ ] After all research gates pass, run 4–8 weeks of paper observation with a kill switch and no real orders.
 
 ## Next milestones
-1. Review the Stage 1 profile, especially large early traded-price outages and funding-rate interpretation.
-2. Reconstruct trade aggressor flow and order-book changes only after validating the live exchange event schema.
-3. Define event-based directional labels and barrier semantics.
-4. Complete the four-fold expanding-window walk-forward experiment with validation-only threshold selection and purged/embargoed boundaries.
-5. Compare simple baselines before ML; then evaluate candidate classifiers/regressors using walk-forward validation.
-6. Include fees, spread, slippage, funding, latency, turnover, drawdown and calibration.
-7. Register only validated models in the desk; add risk controls and paper trading before any live execution decision.
+1. Provision the VPS using `deploy/vps/README.md`; verify recorder uptime, heartbeats, event coverage and off-host backups.
+2. Collect multiple weeks of raw trades, L2 and funding-rate snapshots; validate queue-ahead and funding cashflow semantics.
+3. Build fill-conditioned long/short 1R-stop / 3R-target labels and a maker-entry / maker-target / taker-stop execution replay with explicit no-fill outcomes.
+4. Train separate binary long/short models; choose thresholds only from validation expected value after costs.
+5. Add block-bootstrap confidence intervals, family-wise multiple-testing control and predeclared trend/range/volatility regimes.
+6. Use only the prospective final holdout specified in the preregistration after all code, thresholds and assumptions are frozen.
+7. Register only validated models in the desk; add fractional-Kelly sizing with a hard cap, kill switch and 4–8 week paper observation before any live execution decision.
 
 No order execution is enabled. Feature/label artifacts and experimental baseline models are research data, not trading signals.
