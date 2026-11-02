@@ -140,3 +140,20 @@
 7. Register only validated models in the desk; add fractional-Kelly sizing with a hard cap, kill switch and 4–8 week paper observation before any live execution decision.
 
 No order execution is enabled. Feature/label artifacts and experimental baseline models are research data, not trading signals.
+
+
+## Revised two-horizon Binance flow experiment (2026-11-02)
+
+- [x] Checked Binance public data archive root; it is reachable. Official Binance public-data documentation confirms USD-M futures aggTrades include timestamp and buyer-maker flag, with monthly/daily archives and SHA-256 checksum files.
+- [x] Added monthly BTCUSDT USD-M aggTrades downloader with checksum verification and a raw-archive manifest via verified ZIP + checksum artifact.
+- [x] Added 1-minute proxy flow features: signed base-volume imbalance, trade count, fixed-$100k large-print notional share, signed-notional imbalance and trailing 5m flow acceleration versus the prior 5m window.
+- [x] Added exact UTC close-time merge with no as-of join and no forward-fill. Binance proxy fields are explicitly separate from Delta live order-flow fields.
+- [x] Added a month-at-a-time GitHub Actions workflow that uploads source archive, checksum and derived feature artifacts for 90 days.
+- [x] Changed the current Stage 1 asymmetric label build to exactly two confirmatory horizons: 1h and 3h; 1R stop / 3R target. The 15m horizon is removed from this experiment.
+- [x] Replaced the prior preregistration with a frozen 1h/3h-only specification. Previously viewed historical test blocks are disqualified; prospective holdout remains 2026-11-03 to 2027-01-02 UTC.
+- [ ] Confirm the first monthly archive workflow completes, verify its checksum, feature artifact and row counts, then process the remaining training months incrementally.
+- [ ] Run the two-horizon model with Binance proxy features on chronological training/validation only; do not inspect prospective holdout.
+- [ ] Keep cross-venue transfer as a hypothesis; validate against multiple weeks of Delta WS capture and calibrate maker fill/no-fill from Delta L2 before any execution claims.
+- [ ] VPS is not provisioned. Account owner must provision and authorize the host; no credentials are requested or stored here.
+
+The Binance archive can accelerate historical trade-flow research, but it does not replace Delta event capture or historical queue data. The 1m output is an explanatory feature set, not a strategy or trading signal.
