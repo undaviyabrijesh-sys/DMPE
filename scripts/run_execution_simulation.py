@@ -72,7 +72,7 @@ def main() -> None:
         "realized_vol_60m_pct",
         "realized_vol_180m_pct",
     ]
-    features = pd.read_parquet(feature_path, columns=["time", *needed_volatility])
+    features = pd.read_parquet(feature_path, columns=["time", "close", *needed_volatility])
     features["time"] = pd.to_datetime(features["time"], utc=True, errors="coerce")
     features = features.dropna(subset=["time"]).sort_values("time")
 
