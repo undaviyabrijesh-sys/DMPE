@@ -51,6 +51,23 @@ def _predict_direction(probabilities: np.ndarray, classes: np.ndarray, threshold
     return prediction
 
 
+
+
+def wilson_interval(successes: int, trials: int, z: float = 1.959963984540054) -> list[float] | None:
+    """Approximate two-sided Wilson interval for a binomial proportion."""
+    if trials <= 0:
+        return None
+    p = successes / trials
+    z2 = z * z
+    denominator = 1.0 + z2 / trials
+    center = (p + z2 / (2.0 * trials)) / denominator
+    radius = (
+        z / denominator
+        * np.sqrt((p * (1.0 - p) / trials) + z2 / (4.0 * trials * trials))
+    )
+    return [max(0.0, float(center - radius)), min(1.0, float(center + radius))]
+
+
 def _signal_metrics(y_true: np.ndarray, signals: np.ndarray) -> dict[str, Any]:
     active = signals != 0
     count = int(active.sum())
@@ -58,16 +75,20 @@ def _signal_metrics(y_true: np.ndarray, signals: np.ndarray) -> dict[str, Any]:
         precision = None
         wrong_direction = None
         neutral_outcome = None
+        precision_ci = None
     else:
         actual = y_true[active]
         called = signals[active]
-        precision = float((actual == called).mean())
+        successes = int((actual == called).sum())
+        precision = successes / count
+        precision_ci = wilson_interval(successes, count)
         wrong_direction = float(((actual != 0) & (actual == -called)).mean())
         neutral_outcome = float((actual == 0).mean())
     return {
         "signals": count,
         "coverage": float(active.mean()) if len(active) else 0.0,
         "correct_directional_share_of_signals": precision,
+        "correct_share_wilson_95_ci": precision_ci,
         "wrong_direction_share_of_signals": wrong_direction,
         "no_barrier_touch_share_of_signals": neutral_outcome,
     }
@@ -295,6 +316,8 @@ def evaluate_one(
         "train_end_utc": split_info["train_end"],
         "validation_start_utc": split_info["validation_start"],
         "test_start_utc": split_info["test_start"],
+        "confidence_threshold_selected_on_validation": logistic_threshold,
+        "signal_policy": "direction must be argmax class and exceed validation-selected threshold",
         "validated_for_live_trading": False,
     }, model_path, compress=3)
     result["experimental_logistic_model_file"] = str(model_path)
@@ -355,6 +378,8 @@ def evaluate_one(
         "train_end_utc": split_info["train_end"],
         "validation_start_utc": split_info["validation_start"],
         "test_start_utc": split_info["test_start"],
+        "confidence_threshold_selected_on_validation": tree_threshold,
+        "signal_policy": "direction must be argmax class and exceed validation-selected threshold",
         "validated_for_live_trading": False,
     }, tree_path, compress=3)
     result["experimental_hist_gradient_boosting_model_file"] = str(tree_path)
@@ -414,7 +439,16 @@ def main() -> None:
     report = {
         "created_at_utc": pd.Timestamp.now(tz="UTC").isoformat(),
         "project": "DMPE",
-        "purpose": "Initial baseline research only; no live-trading approval.",
+        "purpose": "Initial exploratory holdout comparison only; no live-trading approval.",
+        "selection_bias_warning": (
+            "The 9 horizon/barrier combinations and two model families are compared on one "
+            "holdout. Do not select a winner from these test results and treat it as unbiased; "
+            "use the next rolling walk-forward experiment as a fresh confirmation."
+        ),
+        "confidence_interval_warning": (
+            "Wilson intervals are binomial approximations and do not account for market-regime "
+            "clustering or serial dependence. Use block-bootstrap intervals in subsequent tests."
+        ),
         "feature_dataset": str(feature_path),
         "feature_count_in_schema": len(feature_columns),
         "training_policy": [
