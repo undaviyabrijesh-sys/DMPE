@@ -1,0 +1,25 @@
+[Unit]
+Description=DMPE Delta BTCUSD public market-data recorder
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=dmpe
+Group=dmpe
+WorkingDirectory=/opt/dmpe
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/dmpe/.venv/bin/python /opt/dmpe/scripts/capture_live.py --symbol BTCUSD --output-dir /var/lib/dmpe/live
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+KillSignal=SIGINT
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/dmpe/live
+
+[Install]
+WantedBy=multi-user.target
