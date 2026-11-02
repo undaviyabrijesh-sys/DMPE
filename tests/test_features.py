@@ -46,10 +46,10 @@ def test_feature_builder_creates_targets_and_respects_gaps():
     # The missing minute rows remain explicit NaN OHLC rows.
     assert output["close"].isna().sum() == 2
     # 90th minute's 15-minute forward window crosses the missing candles.
-    row_90 = output.loc[output["time"] == frame.loc[90, "time"]].iloc[0]
+    row_90 = output.loc[output["time"] == frame.loc[90, "time"] + pd.Timedelta(minutes=1)].iloc[0]
     assert pd.isna(row_90["target_forward_return_15m_pct"])
     # Rolling returns also reset around a market-data gap.
-    time_after_gap = make_price_frame(420).loc[102, "time"]
+    time_after_gap = make_price_frame(420).loc[102, "time"] + pd.Timedelta(minutes=1)
     row_102 = output.loc[output["time"] == time_after_gap].iloc[0]
     assert pd.isna(row_102["log_return_1m_pct"])
 
@@ -84,3 +84,10 @@ def test_hourly_funding_is_delayed_before_join():
     assert at_available == rates[0]
     quality = profile_series("funding_rate_1h", funding, 3600)
     assert quality["invalid_ohlc_rows"] == 0
+
+
+def test_feature_timestamps_represent_completed_bar_close():
+    frame = make_price_frame(30)
+    output, _, _ = build_feature_frame(frame)
+    assert output["time"].iloc[0] == frame["time"].iloc[0] + pd.Timedelta(minutes=1)
+    assert output["time"].iloc[-1] == frame["time"].iloc[-1] + pd.Timedelta(minutes=1)
