@@ -210,8 +210,10 @@ def evaluate_one(
 
     x = sample[feature_columns].apply(pd.to_numeric, errors="coerce")
     # Remove columns that were wholly missing in the training period only.
+    train_non_null = x.iloc[train_idx].notna().any(axis=0).to_numpy()
     usable_features = [
-        col for col in feature_columns if x.iloc[train_idx][col].notna().any()
+        col for col, has_training_values in zip(x.columns, train_non_null)
+        if bool(has_training_values)
     ]
     if not usable_features:
         result["status"] = "skipped_no_nonnull_training_features"
@@ -310,7 +312,7 @@ def main() -> None:
     if not feature_path.exists() or not schema_path.exists():
         raise SystemExit("Feature Parquet and feature_schema.json must both exist.")
     schema = json.loads(schema_path.read_text(encoding="utf-8"))
-    feature_columns = schema.get("feature_columns", [])
+    feature_columns = list(dict.fromkeys(schema.get("feature_columns", [])))
     if not feature_columns:
         raise SystemExit("Feature schema does not contain feature_columns.")
     horizons = [value.strip() for value in args.horizons.split(",") if value.strip()]
