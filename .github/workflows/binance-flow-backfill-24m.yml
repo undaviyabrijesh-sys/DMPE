@@ -59,8 +59,9 @@ jobs:
 
       - name: Parse month
         run: |
-          echo "ARCHIVE_YEAR=${{ matrix.month }} " | sed 's/-.*//' >> "$GITHUB_ENV"
-          echo "ARCHIVE_MONTH=${{ matrix.month }}" | sed 's/.*-//' >> "$GITHUB_ENV"
+          IFS=- read -r ARCHIVE_YEAR ARCHIVE_MONTH <<< "${{ matrix.month }}"
+          echo "ARCHIVE_YEAR=$ARCHIVE_YEAR" >> "$GITHUB_ENV"
+          echo "ARCHIVE_MONTH=$ARCHIVE_MONTH" >> "$GITHUB_ENV"
 
       - name: Download and checksum source archive
         run: |
