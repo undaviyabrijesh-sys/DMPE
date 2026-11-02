@@ -26,6 +26,10 @@ FEATURE_DIRS = [
     ROOT / "data" / "processed",
     ROOT / "processed",
 ]
+BASELINE_REPORT_PATHS = [
+    Path(os.getenv("DMPE_STAGE2_DIR", ROOT / "stage2_output")) / "baseline_evaluation.json",
+    ROOT / "artifacts" / "stage2_output" / "baseline_evaluation.json",
+]
 
 TF_SECONDS = {
     "1m": 60, "3m": 180, "5m": 300, "15m": 900, "30m": 1800,
@@ -303,6 +307,47 @@ def discover_feature_dataset() -> tuple[Path | None, Path | None]:
 def read_feature_columns(path_str: str, modified_ns: int, columns: tuple[str, ...]) -> pd.DataFrame:
     del modified_ns
     return pd.read_parquet(path_str, columns=["time", *columns])
+
+
+
+
+def discover_baseline_report() -> Path | None:
+    return next((path for path in BASELINE_REPORT_PATHS if path.exists()), None)
+
+
+def baseline_scorecard(report: dict[str, Any]) -> pd.DataFrame:
+    """Flatten model test scores without ranking variants by a reused test set."""
+    rows = []
+    for item in report.get("results", []):
+        if item.get("status") != "completed":
+            continue
+        for model_name, metric_key, signal_key in (
+            ("Logistic regression", "logistic_regression_test", "logistic_signals"),
+            ("Histogram gradient boosting", "hist_gradient_boosting_test", "hist_gradient_boosting_signals"),
+        ):
+            metrics = item.get(metric_key) or {}
+            signals = item.get(signal_key) or {}
+            if not metrics:
+                continue
+            interval = signals.get("correct_share_wilson_95_ci")
+            rows.append({
+                "Model": model_name,
+                "Horizon": item.get("horizon"),
+                "Barrier × RV": item.get("barrier_multiple"),
+                "Test rows": metrics.get("rows"),
+                "Balanced accuracy": metrics.get("balanced_accuracy"),
+                "Macro F1": metrics.get("macro_f1"),
+                "Log loss": metrics.get("multiclass_log_loss"),
+                "Signals": signals.get("signals", 0),
+                "Signal coverage": signals.get("coverage"),
+                "Correct signal share": signals.get("correct_directional_share_of_signals"),
+                "Approx. 95% CI low": interval[0] if interval else None,
+                "Approx. 95% CI high": interval[1] if interval else None,
+                "Wrong direction share": signals.get("wrong_direction_share_of_signals"),
+                "No-touch share": signals.get("no_barrier_touch_share_of_signals"),
+                "Threshold": signals.get("threshold_selected_on_validation"),
+            })
+    return pd.DataFrame(rows)
 
 
 def main() -> None:
@@ -622,10 +667,54 @@ def main() -> None:
         ]
         for title, description in gates:
             st.markdown(f"- **{title}:** {description}")
+        report_path = discover_baseline_report()
+        if report_path is None:
+            st.info(
+                "No baseline evaluation report found. Download the "
+                "dmpe-baseline-evaluation artifact and extract baseline_evaluation.json "
+                "into stage2_output/ (or set DMPE_STAGE2_DIR)."
+            )
+        else:
+            baseline_report = load_report(report_path)
+            if baseline_report:
+                st.markdown("**Exploratory out-of-sample baseline scorecard**")
+                st.caption(
+                    f"Report created {baseline_report.get('created_at_utc', 'unknown')} · "
+                    f"{baseline_report.get('feature_count_in_schema', 'n/a')} candidate inputs"
+                )
+                if baseline_report.get("selection_bias_warning"):
+                    st.warning(baseline_report["selection_bias_warning"])
+                scorecard = baseline_scorecard(baseline_report)
+                if not scorecard.empty:
+                    st.dataframe(
+                        scorecard.style.format({
+                            "Balanced accuracy": "{:.1%}",
+                            "Macro F1": "{:.3f}",
+                            "Log loss": "{:.3f}",
+                            "Signal coverage": "{:.2%}",
+                            "Correct signal share": "{:.1%}",
+                            "Approx. 95% CI low": "{:.1%}",
+                            "Approx. 95% CI high": "{:.1%}",
+                            "Wrong direction share": "{:.1%}",
+                            "No-touch share": "{:.1%}",
+                            "Threshold": "{:.2f}",
+                        }, na_rep="—"),
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+                    st.caption(
+                        "The confidence interval is an approximate binomial Wilson interval. "
+                        "It does not correct for regime clustering or serial dependence."
+                    )
+                else:
+                    st.warning("The baseline report contains no completed model evaluations.")
+            else:
+                st.error("The baseline evaluation JSON could not be read.")
+
         st.info(
-            "Planned progression: research desk → validated signal service → risk engine → "
-            "paper-trading adapter → separately approved broker execution. "
-            "No exchange credentials are needed for this data-only desk."
+            "Planned progression: enrich inputs with verified live trade/order-book flow, "
+            "run repeated walk-forward tests, then simulate fills/costs and paper trade. "
+            "The current scorecard is experimental research, not a live signal or approval."
         )
 
     st.divider()
