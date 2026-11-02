@@ -25,7 +25,7 @@ Run locally until interrupted:
 ```bash
 python scripts/capture_live.py --symbol BTCUSD
 ```
-Or start a finite capture in GitHub Actions from **Actions → DMPE live market-data capture → Run workflow** (1–120 minutes). The output is uploaded as an artifact. GitHub Actions is not a permanent WebSocket host; uninterrupted capture needs a VPS or another always-on service.
+Or start a finite capture in GitHub Actions from **Actions → DMPE live market-data capture → Run workflow** (1–120 minutes). For meaningful microstructure research, use a longer session rather than the 5-minute push-triggered smoke test. The workflow uploads both the raw JSONL capture and a derived order-flow feature artifact automatically. GitHub Actions is not a permanent WebSocket host; multi-day continuous capture needs a VPS or another always-on service.
 
 Raw data are intentionally excluded from Git commits. Download the workflow artifacts from the repository's Actions page.
 
