@@ -86,13 +86,15 @@ This is only the first classification baseline. It is **not** a backtest of real
 
 The live recorder also subscribes to Delta's `system_status` and `product_updates` public channels. These are operational safety feeds, not alpha features.
 
-After collecting raw JSONL data, build minute-level trade and L2 descriptors:
+After collecting raw JSONL data, build minute-level trade and L2 descriptors locally:
 ```bash
 python scripts/build_live_orderflow_dataset.py --input-dir data/raw/live --output-dir data/processed
 ```
 This produces `dmpe_BTCUSD_live_orderflow_1m.parquet`, CSV and a report. It summarizes aggressive buy/sell contract volume, signed volume imbalance, trade VWAP/range/arrival pace, top-1/5/10/15 order-book depth imbalance, spread and microprice pressure. Unknown trade-role codes remain unclassified and missing event minutes are not filled.
 
 Delta's public trade event documents `r` as `buyer_role`: `t` means the buyer was taker and `m` means the buyer was maker. DMPE therefore maps `t` to buyer-taker (aggressive buy) and `m` to seller-taker (aggressive sell); other values are not guessed. The event data are microsecond-timestamped. The L2 public channel provides top-15 bid/ask price-size levels. See the [official Delta WebSocket public-channel documentation](https://docs.delta.exchange/#trades).
+
+Alternatively, run **Actions → DMPE live order-flow feature build** and provide the run ID of a completed live-capture workflow. This creates the same Parquet/CSV/report bundle as a 30-day artifact. Extract the resulting Parquet into `orderflow_output/processed/`; the Streamlit Live Tape panel will show its latest aggregated pressure, depth and spread readings.
 
 These microstructure features start only when the WebSocket recorder is running; the historical candle dataset cannot reconstruct past trades or order-book states. They must be collected over time and independently evaluated before being added to a trading model.
 
