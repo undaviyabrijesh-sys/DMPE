@@ -52,11 +52,15 @@ class LiveRecorder:
             {"name": "ticker", "symbols": [self.symbol]},
             {"name": "mark_price", "symbols": [f"MARK:{self.symbol}"]},
             {"name": "funding_rate", "symbols": [self.symbol]},
+            # Public operational feeds: use as a hard safety gate for any future
+            # execution adapter, not as directional alpha features.
+            {"name": "system_status"},
+            {"name": "product_updates"},
         ]
         ws.send(json.dumps({"type": "subscribe", "payload": {"channels": channels}}))
         print(
             f"Connected; subscribed to trades, L2, 1m candles, ticker/OI, "
-            f"mark price and funding rate for {self.symbol}."
+            f"mark price, funding rate and exchange status feeds for {self.symbol}."
         )
 
     def on_message(self, ws: websocket.WebSocketApp, message: str) -> None:
