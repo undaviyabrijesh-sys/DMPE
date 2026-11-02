@@ -111,6 +111,23 @@ Outputs:
 
 This is a stronger confirmation than a single 70/15/15 holdout, but still not an execution backtest. Test windows are sequential, and later training folds may include earlier folds' already-observed test history. The report explicitly documents this. We must still test fee-aware fills, slippage, funding, market impact and block-bootstrap uncertainty before deciding whether any pattern is tradeable.
 
+## Stage 4 — Execution-cost simulation
+
+Run **Actions → DMPE execution-cost simulation** after the repeated walk-forward evaluation completes. The workflow downloads three immutable inputs: the walk-forward out-of-sample signal artifact, the Stage 1 feature dataset, and the original historical BTCUSD 1-minute candles. You can change all three run IDs from the workflow form.
+
+The simulator trades each horizon/barrier variant separately and tests 0, 1, 2, 5 and 10 bps of assumed slippage per side. It enters at the next 1-minute candle open after a signal, uses the corresponding horizon-aligned realized-volatility barrier, applies adverse entry/exit slippage, and charges taker commission on both entry and exit. It uses one BTCUSD contract by default (lot size 0.001 BTC); change the script arguments to scale contract count.
+
+The default fee assumption is standard BTCUSD perpetual taker commission of 0.05% plus 18% GST on the fee (= 5.9 bps per side). Current published contract specifications show BTCUSD lot size 0.001 BTC, 0.05% taker commission, and 8-hour funding interval. The public fee page also confirms GST on trading fees. Check the fee page before any future live deployment because account promotions or fee schedules may differ:
+- [BTCUSD contract specifications](https://www.delta.exchange/contracts)
+- [Delta trading fee schedule](https://www.delta.exchange/fees?tab=trading-fees)
+
+Outputs in `dmpe-execution-cost-simulation`:
+- `execution_sensitivity.csv`: P&L and risk metrics for each horizon, barrier multiple and slippage scenario.
+- `execution_trades.csv`: individual simulated fills, exits, fees and returns.
+- `execution_simulation.json`: assumptions, exclusions and full scorecard.
+
+Important exclusions in version 1: funding payments, account INR conversion, leverage, liquidation, queue position, market impact and measured historical spread. Funding is deliberately excluded until the meaning/timing of historical funding candles is verified against actual settlement realization times. The configured slippage values are scenarios, not measured historical estimates. P&L is USD-equivalent for the configured contract size, fixed-size/non-compounded, and is not a live fill replay. No orders are submitted. Do not approve any strategy from this report until funding and realistic execution assumptions are included and results remain robust on additional unseen data.
+
 ## Install locally
 Python 3.11+ recommended:
 ```bash
