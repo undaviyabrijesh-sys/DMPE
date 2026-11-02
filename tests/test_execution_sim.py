@@ -64,7 +64,8 @@ def test_same_minute_stop_and_target_uses_conservative_stop_first():
 
 def test_stop_gap_fills_at_worse_open_not_better_stop_level():
     signals, prices, features = make_inputs()
-    # Entry is at row 0 open; the following candle gaps below the long stop.
+    # Keep the entry candle between barriers; the following candle gaps below the stop.
+    prices.loc[0, ["high", "low"]] = [100.05, 99.95]
     prices.loc[1, ["open", "high", "low", "close"]] = [99.50, 99.60, 99.30, 99.40]
     trades, _ = simulate_signal_set(signals, prices, features, ExecutionAssumptions(
         slippage_bps_per_side=0.0
