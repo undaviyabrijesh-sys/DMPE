@@ -1,6 +1,12 @@
 name: DMPE live order-flow feature build
 
 on:
+  push:
+    paths:
+      - ".github/workflows/live-orderflow-features.yml"
+      - "src/dmpe/orderflow.py"
+      - "scripts/build_live_orderflow_dataset.py"
+      - "tests/test_orderflow.py"
   workflow_dispatch:
     inputs:
       capture_run_id:
@@ -35,8 +41,8 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           repository: ${{ github.repository }}
-          run-id: ${{ inputs.capture_run_id }}
-          name: dmpe-live-capture-${{ inputs.capture_run_id }}
+          run-id: ${{ github.event.inputs.capture_run_id || '41492964835' }}
+          name: dmpe-live-capture-${{ github.event.inputs.capture_run_id || '41492964835' }}
           path: raw_capture
 
       - name: Build trade and L2 minute features
