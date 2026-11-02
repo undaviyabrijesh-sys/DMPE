@@ -1,6 +1,12 @@
 name: DMPE live market-data capture
 
 on:
+  push:
+    paths:
+      - ".github/workflows/live-capture.yml"
+      - "scripts/capture_live.py"
+      - "src/dmpe/live_recorder.py"
+      - "requirements.txt"
   workflow_dispatch:
     inputs:
       duration_minutes:
@@ -11,6 +17,10 @@ on:
 
 permissions:
   contents: read
+
+concurrency:
+  group: dmpe-live-capture-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   capture:
@@ -28,7 +38,7 @@ jobs:
         run: pip install -r requirements.txt
       - name: Validate duration
         env:
-          DURATION_MINUTES: ${{ github.event.inputs.duration_minutes }}
+          DURATION_MINUTES: ${{ github.event.inputs.duration_minutes || '5' }}
         run: |
           python - <<'PY'
           import os
@@ -38,7 +48,7 @@ jobs:
           PY
       - name: Capture public BTC market data
         env:
-          DURATION_MINUTES: ${{ github.event.inputs.duration_minutes }}
+          DURATION_MINUTES: ${{ github.event.inputs.duration_minutes || '5' }}
         run: python scripts/capture_live.py --symbol BTCUSD --duration-minutes "$DURATION_MINUTES"
       - name: Upload raw live events
         if: always()
