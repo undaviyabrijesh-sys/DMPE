@@ -1,0 +1,56 @@
+name: DMPE historical data backfill
+
+on:
+  push:
+    paths:
+      - ".github/workflows/historical-backfill.yml"
+      - "scripts/backfill_bundle.py"
+      - "src/dmpe/delta_rest.py"
+      - "requirements.txt"
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "Number of historical days to request"
+        required: true
+        default: "1825"
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dmpe-historical-backfill
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - name: Check out DMPE
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Download historical BTC datasets
+        env:
+          BACKFILL_DAYS: ${{ github.event.inputs.days || '1825' }}
+        run: python scripts/backfill_bundle.py --days "$BACKFILL_DAYS"
+      - name: Audit candle history
+        if: success()
+        run: python scripts/audit_history.py --directory data/raw/history
+      - name: Upload historical datasets and reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dmpe-historical-data-${{ github.run_id }}
+          path: |
+            data/raw/history/
+            data/raw/metadata/
+          if-no-files-found: warn
+          retention-days: 30
+          compression-level: 6
