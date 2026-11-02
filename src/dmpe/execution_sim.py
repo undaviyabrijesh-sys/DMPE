@@ -161,9 +161,6 @@ def simulate_signal_set(
         raise ValueError("Pass exactly one barrier multiplier per simulation call.")
     multiplier = float(signals["barrier_multiple"].iloc[0])
     volatility_column = VOL_COLUMNS[horizon_name]
-    if volatility_column not in features.columns:
-        raise ValueError(f"Feature dataset is missing {volatility_column}.")
-
     # Feature rows are timestamped at the previous candle close; this same time
     # is the next 1-minute candle's OPEN timestamp in Delta's raw candle history.
     fee_rate = assumptions.taker_fee_bps_per_side_including_gst / 10_000.0
