@@ -97,7 +97,7 @@ def simulate_signal_set(
     feature_frame: pd.DataFrame,
     assumptions: ExecutionAssumptions,
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
-    """Simulate one horizon/barrier signal set with a fixed, non-compounding size."""
+    """Simulate one horizon/barrier signal set with fixed size; use NumPy OHLC arrays."""
     if assumptions.taker_fee_bps_per_side_including_gst < 0:
         raise ValueError("Taker fee bps must be non-negative.")
     if assumptions.slippage_bps_per_side < 0:
@@ -105,7 +105,8 @@ def simulate_signal_set(
     if assumptions.lot_size_btc <= 0 or assumptions.contracts <= 0:
         raise ValueError("Contract lot size and contract count must be positive.")
     if signals.empty:
-        return pd.DataFrame(), {"input_signals": 0, "skipped": {}, **summarize_trades(pd.DataFrame())}
+        empty = pd.DataFrame()
+        return empty, {"input_signals": 0, "skipped": {}, **summarize_trades(empty)}
 
     prices = _normalize_prices(price_frame)
     features = feature_frame.copy()
@@ -116,51 +117,73 @@ def simulate_signal_set(
     if horizon_name not in HORIZONS or not signals["horizon"].eq(horizon_name).all():
         raise ValueError("Pass exactly one supported horizon per simulation call.")
     horizon_minutes = HORIZONS[horizon_name]
-    if not signals["barrier_multiple"].nunique() == 1:
+    if signals["barrier_multiple"].nunique() != 1:
         raise ValueError("Pass exactly one barrier multiplier per simulation call.")
     multiplier = float(signals["barrier_multiple"].iloc[0])
     volatility_column = VOL_COLUMNS[horizon_name]
     if volatility_column not in features.columns:
         raise ValueError(f"Feature dataset is missing {volatility_column}.")
 
-    # Feature rows are timestamped at previous candle close; this same timestamp
-    # is the next candle's OPEN timestamp in Delta's raw candle history.
+    # Feature rows are timestamped at the previous candle close; this same time
+    # is the next 1-minute candle's OPEN timestamp in Delta's raw candle history.
     fee_rate = assumptions.taker_fee_bps_per_side_including_gst / 10_000.0
     slippage = assumptions.slippage_bps_per_side / 10_000.0
     btc_quantity = assumptions.lot_size_btc * assumptions.contracts
+
+    price_index = prices.index
+    price_positions = {timestamp: idx for idx, timestamp in enumerate(price_index)}
+    times_ns = price_index.asi8
+    opens = prices["open"].to_numpy(dtype="float64")
+    highs = prices["high"].to_numpy(dtype="float64")
+    lows = prices["low"].to_numpy(dtype="float64")
+    closes = prices["close"].to_numpy(dtype="float64")
+    feature_volatility = features[volatility_column].to_dict()
+
     rows: list[dict[str, Any]] = []
     skipped: dict[str, int] = {}
+    expected_step_ns = 60_000_000_000
 
-    for _, signal_row in signals.sort_values("time").iterrows():
+    for signal_row in signals.sort_values("time").to_dict(orient="records"):
         signal_time = pd.to_datetime(signal_row["time"], utc=True)
         direction = int(signal_row["signal"])
         if direction not in (-1, 1):
             skipped["non_directional_signal"] = skipped.get("non_directional_signal", 0) + 1
             continue
-        if signal_time not in prices.index:
+        entry_position = price_positions.get(signal_time)
+        if entry_position is None:
             skipped["missing_entry_candle"] = skipped.get("missing_entry_candle", 0) + 1
             continue
-        if signal_time not in features.index:
-            skipped["missing_point_in_time_features"] = skipped.get("missing_point_in_time_features", 0) + 1
-            continue
-
-        vol_pct = pd.to_numeric(
-            pd.Series([features.at[signal_time, volatility_column]]), errors="coerce"
-        ).iloc[0]
-        if pd.isna(vol_pct) or not np.isfinite(float(vol_pct)) or float(vol_pct) <= 0:
+        vol_pct = feature_volatility.get(signal_time)
+        if vol_pct is None or pd.isna(vol_pct) or not np.isfinite(float(vol_pct)) or float(vol_pct) <= 0:
             skipped["invalid_volatility_scale"] = skipped.get("invalid_volatility_scale", 0) + 1
             continue
 
-        expected_times = pd.date_range(signal_time, periods=horizon_minutes, freq="1min", tz="UTC")
-        if not expected_times.isin(prices.index).all():
+        end_position = entry_position + horizon_minutes
+        if end_position > len(prices):
             skipped["incomplete_future_price_window"] = skipped.get("incomplete_future_price_window", 0) + 1
             continue
-        bars = prices.loc[expected_times]
-        if bars[["open", "high", "low", "close"]].isna().any().any():
+        window_times_ns = times_ns[entry_position:end_position]
+        if (
+            len(window_times_ns) != horizon_minutes
+            or (horizon_minutes > 1 and not np.all(np.diff(window_times_ns) == expected_step_ns))
+        ):
+            skipped["incomplete_future_price_window"] = skipped.get("incomplete_future_price_window", 0) + 1
+            continue
+
+        open_window = opens[entry_position:end_position]
+        high_window = highs[entry_position:end_position]
+        low_window = lows[entry_position:end_position]
+        close_window = closes[entry_position:end_position]
+        if not (
+            np.isfinite(open_window).all()
+            and np.isfinite(high_window).all()
+            and np.isfinite(low_window).all()
+            and np.isfinite(close_window).all()
+        ):
             skipped["invalid_future_ohlc"] = skipped.get("invalid_future_ohlc", 0) + 1
             continue
 
-        raw_entry = float(bars["open"].iloc[0])
+        raw_entry = float(open_window[0])
         entry_fill = raw_entry * (1.0 + direction * slippage)
         distance_pct = multiplier * float(vol_pct)
         if distance_pct <= 0 or distance_pct >= 100:
@@ -169,47 +192,35 @@ def simulate_signal_set(
 
         target = entry_fill * (1.0 + direction * distance_pct / 100.0)
         stop = entry_fill * (1.0 - direction * distance_pct / 100.0)
-        raw_exit: float | None = None
-        exit_reason = "time_exit"
-        holding_minutes = horizon_minutes
+        if direction == 1:
+            stop_hits = np.flatnonzero(low_window <= stop)
+            target_hits = np.flatnonzero(high_window >= target)
+        else:
+            stop_hits = np.flatnonzero(high_window >= stop)
+            target_hits = np.flatnonzero(low_window <= target)
 
-        for bar_number, (_, bar) in enumerate(bars.iterrows(), start=1):
-            bar_open = float(bar["open"])
-            bar_high = float(bar["high"])
-            bar_low = float(bar["low"])
-            if direction == 1:
-                stop_hit = bar_low <= stop
-                target_hit = bar_high >= target
-                if stop_hit:
-                    # A stop-market order gaps through at the open, not at the
-                    # better stop level. When both levels occur intrabar, stop wins.
-                    raw_exit = min(bar_open, stop)
-                    exit_reason = "stop_and_target_same_bar_stop_first" if target_hit else "stop"
-                    holding_minutes = bar_number
-                    break
-                if target_hit:
-                    raw_exit = target
-                    exit_reason = "target"
-                    holding_minutes = bar_number
-                    break
-            else:
-                stop_hit = bar_high >= stop
-                target_hit = bar_low <= target
-                if stop_hit:
-                    raw_exit = max(bar_open, stop)
-                    exit_reason = "stop_and_target_same_bar_stop_first" if target_hit else "stop"
-                    holding_minutes = bar_number
-                    break
-                if target_hit:
-                    raw_exit = target
-                    exit_reason = "target"
-                    holding_minutes = bar_number
-                    break
+        first_stop = int(stop_hits[0]) if len(stop_hits) else None
+        first_target = int(target_hits[0]) if len(target_hits) else None
+        raw_exit: float
+        holding_minutes: int
+        if first_stop is not None and (first_target is None or first_stop <= first_target):
+            stop_bar_open = float(open_window[first_stop])
+            raw_exit = min(stop_bar_open, stop) if direction == 1 else max(stop_bar_open, stop)
+            exit_reason = (
+                "stop_and_target_same_bar_stop_first"
+                if first_target == first_stop else "stop"
+            )
+            holding_minutes = first_stop + 1
+        elif first_target is not None:
+            raw_exit = target
+            exit_reason = "target"
+            holding_minutes = first_target + 1
+        else:
+            raw_exit = float(close_window[-1])
+            exit_reason = "time_exit"
+            holding_minutes = horizon_minutes
 
-        if raw_exit is None:
-            raw_exit = float(bars["close"].iloc[-1])
         exit_fill = raw_exit * (1.0 - direction * slippage)
-
         entry_notional = btc_quantity * entry_fill
         exit_notional = btc_quantity * exit_fill
         gross_pnl = btc_quantity * direction * (exit_fill - entry_fill)
@@ -257,7 +268,6 @@ def simulate_signal_set(
         **summarize_trades(trades),
     }
     return trades, summary
-
 
 def run_slippage_sensitivity(
     signals_frame: pd.DataFrame,
