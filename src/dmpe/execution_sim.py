@@ -68,8 +68,8 @@ def summarize_trades(trades: pd.DataFrame) -> dict[str, Any]:
     winners = pnl[pnl > 0]
     losers = pnl[pnl < 0]
     profit_factor = (
-        float(winners.sum() / abs(losers.sum())) if len(losers) and losers.sum() != 0
-        else (float("inf") if len(winners) else None)
+        float(winners.sum() / abs(losers.sum()))
+        if len(losers) and losers.sum() != 0 else None
     )
     return {
         "trades": int(len(trades)),
