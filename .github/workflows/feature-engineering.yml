@@ -1,0 +1,60 @@
+name: DMPE feature engineering
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: "GitHub Actions run ID containing the historical backfill artifact"
+        required: true
+        default: "41481361783"
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  profile-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Check out DMPE
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Download historical backfill artifact
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.source_run_id }}
+          name: dmpe-historical-data-${{ inputs.source_run_id }}
+          path: stage1_input
+
+      - name: Profile data coverage and timestamp gaps
+        run: |
+          python scripts/profile_history.py \
+            --directory stage1_input/history \
+            --output-dir stage1_output/metadata
+
+      - name: Build feature and forward-label dataset
+        run: |
+          python scripts/build_feature_dataset.py \
+            --input-dir stage1_input/history \
+            --output-dir stage1_output/processed
+
+      - name: Upload DMPE Stage 1 outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: dmpe-stage1-feature-engineering
+          path: stage1_output
+          if-no-files-found: error
+          retention-days: 30
