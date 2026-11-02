@@ -18,7 +18,7 @@ def make_price_frame(periods=420):
 
 
 def test_normalize_ohlcv_sorts_deduplicates_and_does_not_fill_gaps():
-    frame = make_price_frame(10).iloc[[0, 1, 3, 2, 3, 4]].copy()
+    frame = make_price_frame(10).iloc[[0, 1, 3, 4, 5, 5]].copy()
     normalized = normalize_ohlcv(frame)
     assert normalized["time"].is_monotonic_increasing
     assert not normalized["time"].duplicated().any()
@@ -49,7 +49,8 @@ def test_feature_builder_creates_targets_and_respects_gaps():
     row_90 = output.loc[output["time"] == frame.loc[90, "time"]].iloc[0]
     assert pd.isna(row_90["target_forward_return_15m_pct"])
     # Rolling returns also reset around a market-data gap.
-    row_102 = output.loc[output["time"] == frame.loc[102, "time"]].iloc[0]
+    time_after_gap = make_price_frame(420).loc[102, "time"]
+    row_102 = output.loc[output["time"] == time_after_gap].iloc[0]
     assert pd.isna(row_102["log_return_1m_pct"])
 
 
