@@ -35,6 +35,16 @@
 - [ ] Review final feature artifact's target distributions and barrier-label class balance
 - [ ] Add target barrier labels and walk-forward model evaluation
 
+## Stage 3 walk-forward findings (run 41492585989)
+
+- Four expanding-window folds completed, each with a 60-day validation block and a following 60-day test block, horizon-sized embargoes, and validation-only confidence thresholds.
+- The promising single-holdout 15m / 0.75x RV candidate did **not** replicate: across 22,989 combined untouched test rows it produced 1,898 calls (8.3% coverage), 48.2% exact label match, 45.0% wrong-direction outcomes and 6.7% no-touch outcomes. Approximate Wilson 95% interval: 46.0%–50.5%.
+- 15m / 1.0x: 914 calls, 47.4% correct share (approximate 95% interval 44.2%–50.6%).
+- 1h / 0.75x: 1,019 calls, 44.8% correct share (approximate 95% interval 41.8%–47.9%).
+- 3h / 1.0x: 211 calls, 42.7% correct share (approximate 95% interval 36.2%–49.4%).
+- All 9 variants had combined balanced accuracy below 44%; no variant established a repeatable directional edge. Larger 1.5x barriers mostly learned to predict no-touch/flat and generated few or no signals.
+- Decision: the current candle-derived feature set is insufficient. Do not deploy these models or call their outputs trades. Next research priority is to improve the information set (verified live trade flow/L2), investigate event labels and regimes, then re-test with a fee-aware simulator and block-bootstrap uncertainty.
+
 ## Milestone 4 — Live microstructure foundation
 - [x] Subscribe the public recorder to exchange-wide system status and product trading-status feeds
 - [x] Verify Delta public trade field `r` means buyer_role (t=buyer taker, m=buyer maker)
