@@ -1,0 +1,51 @@
+name: DMPE live market-data capture
+
+on:
+  workflow_dispatch:
+    inputs:
+      duration_minutes:
+        description: "Capture duration (minutes; maximum 120)"
+        required: true
+        default: "15"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 130
+    steps:
+      - name: Check out DMPE
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Validate duration
+        env:
+          DURATION_MINUTES: ${{ github.event.inputs.duration_minutes }}
+        run: |
+          python - <<'PY'
+          import os
+          value = int(os.environ["DURATION_MINUTES"])
+          if not 1 <= value <= 120:
+              raise SystemExit("duration_minutes must be between 1 and 120")
+          PY
+      - name: Capture public BTC market data
+        env:
+          DURATION_MINUTES: ${{ github.event.inputs.duration_minutes }}
+        run: python scripts/capture_live.py --symbol BTCUSD --duration-minutes "$DURATION_MINUTES"
+      - name: Upload raw live events
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dmpe-live-capture-${{ github.run_id }}
+          path: data/raw/live/
+          if-no-files-found: warn
+          retention-days: 14
+          compression-level: 6
