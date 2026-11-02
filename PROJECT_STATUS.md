@@ -16,6 +16,7 @@
 - [x] Interactive candle/volume chart with timeframe aggregation and basic market descriptors
 - [x] Local Parquet/CSV upload, dataset selection and CSV export
 - [x] Auto-refreshing live JSONL tape with recent trade display and best-effort L2 size imbalance
+- [x] Show exchange system/product trading-status events as future execution safety gates
 - [x] Backfill/audit report panels and basic data-integrity checks
 - [x] Explicit model/algorithm release gate; order execution remains disabled
 - [ ] Smoke-test the app against extracted historical and live artifacts
@@ -33,6 +34,17 @@
 - [x] Store model inputs and forward targets as float32 to reduce artifact size
 - [ ] Review final feature artifact's target distributions and barrier-label class balance
 - [ ] Add target barrier labels and walk-forward model evaluation
+
+## Milestone 4 — Live microstructure foundation
+- [x] Subscribe the public recorder to exchange-wide system status and product trading-status feeds
+- [x] Verify Delta public trade field `r` means buyer_role (t=buyer taker, m=buyer maker)
+- [x] Map documented buyer-role to aggressive buy/sell volume; unknown codes remain unclassified
+- [x] Parse Delta ob_l2 top-15 snapshots into multi-level depth imbalance, spread and microprice pressure
+- [x] Add minute-close event aggregation for trades and L2 with no forward filling
+- [x] Add unit tests for aggressor inference, depth imbalance and missing-event minutes
+- [ ] Collect materially longer continuous live trade/L2 data
+- [ ] Reconstruct event-stream disconnect and stale-feed quality flags before using order-flow data in models
+- [ ] Evaluate live microstructure features only on forward-collected data; historical candles cannot substitute for past tick/order-book events
 
 ## Historical coverage snapshot
 - Requested: 1,825 days (five years).
