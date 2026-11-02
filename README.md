@@ -98,10 +98,10 @@ Alternatively, run **Actions → DMPE live order-flow feature build** and provid
 
 To join live features to the candle feature dataset without lookahead or forward-fill:
 ```bash
-python scripts/merge_live_orderflow_features.py \\
-  --feature-file stage1_output/processed/dmpe_BTCUSD_1m_features.parquet \\
-  --orderflow-file orderflow_output/processed/dmpe_BTCUSD_live_orderflow_1m.parquet \\
-  --schema-file stage1_output/processed/feature_schema.json \\
+python scripts/merge_live_orderflow_features.py \
+  --feature-file stage1_output/processed/dmpe_BTCUSD_1m_features.parquet \
+  --orderflow-file orderflow_output/processed/dmpe_BTCUSD_live_orderflow_1m.parquet \
+  --schema-file stage1_output/processed/feature_schema.json \
   --output-dir orderflow_merged
 ```
 The merge is exact on UTC minute-close timestamps. Missing capture rows remain missing; rolling 5m/15m descriptors require complete windows. Training must use a chronological period after the actual recorder start and should include feed-coverage checks.
