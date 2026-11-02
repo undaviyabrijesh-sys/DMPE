@@ -30,6 +30,10 @@ BASELINE_REPORT_PATHS = [
     Path(os.getenv("DMPE_STAGE2_DIR", ROOT / "stage2_output")) / "baseline_evaluation.json",
     ROOT / "artifacts" / "stage2_output" / "baseline_evaluation.json",
 ]
+WALK_FORWARD_REPORT_PATHS = [
+    Path(os.getenv("DMPE_STAGE3_DIR", ROOT / "stage3_output")) / "walk_forward_report.json",
+    ROOT / "artifacts" / "stage3_output" / "walk_forward_report.json",
+]
 
 TF_SECONDS = {
     "1m": 60, "3m": 180, "5m": 300, "15m": 900, "30m": 1800,
@@ -359,6 +363,39 @@ def baseline_scorecard(report: dict[str, Any]) -> pd.DataFrame:
                 "No-touch share": signals.get("no_barrier_touch_share_of_signals"),
                 "Threshold": signals.get("threshold_selected_on_validation"),
             })
+    return pd.DataFrame(rows)
+
+
+
+
+def discover_walk_forward_report() -> Path | None:
+    return next((path for path in WALK_FORWARD_REPORT_PATHS if path.exists()), None)
+
+
+def walk_forward_scorecard(report: dict[str, Any]) -> pd.DataFrame:
+    rows = []
+    for item in report.get("results", []):
+        if item.get("status") != "completed":
+            continue
+        metrics = item.get("combined_untouched_test_metrics") or {}
+        signals = item.get("combined_confidence_gated_test_signals") or {}
+        interval = signals.get("correct_share_wilson_95_ci")
+        rows.append({
+            "Horizon": item.get("horizon"),
+            "Barrier × RV": item.get("barrier_multiple"),
+            "Folds": item.get("completed_folds"),
+            "Test rows": metrics.get("rows"),
+            "Balanced accuracy": metrics.get("balanced_accuracy"),
+            "Macro F1": metrics.get("macro_f1"),
+            "Directional calls": signals.get("signals", 0),
+            "Signal coverage": signals.get("coverage"),
+            "Correct signal share": signals.get("correct_directional_share_of_signals"),
+            "Approx. 95% CI low": interval[0] if interval else None,
+            "Approx. 95% CI high": interval[1] if interval else None,
+            "Wrong direction share": signals.get("wrong_direction_share_of_signals"),
+            "No-touch share": signals.get("no_barrier_touch_share_of_signals"),
+            "Folds with validation threshold": signals.get("folds_with_selected_threshold"),
+        })
     return pd.DataFrame(rows)
 
 
@@ -740,6 +777,54 @@ def main() -> None:
                     st.warning("The baseline report contains no completed model evaluations.")
             else:
                 st.error("The baseline evaluation JSON could not be read.")
+
+        walk_forward_path = discover_walk_forward_report()
+        if walk_forward_path is None:
+            st.info(
+                "No repeated walk-forward report found. Download the "
+                "dmpe-walk-forward-evaluation artifact and extract walk_forward_report.json "
+                "into stage3_output/ (or set DMPE_STAGE3_DIR)."
+            )
+        else:
+            wf_report = load_report(walk_forward_path)
+            if wf_report:
+                st.markdown("**Repeated expanding-window walk-forward results**")
+                st.caption(
+                    f"Four 60-day test folds · report created "
+                    f"{wf_report.get('created_at_utc', 'unknown')}"
+                )
+                wf_table = walk_forward_scorecard(wf_report)
+                if not wf_table.empty:
+                    st.dataframe(
+                        wf_table.style.format({
+                            "Balanced accuracy": "{:.1%}",
+                            "Macro F1": "{:.3f}",
+                            "Signal coverage": "{:.2%}",
+                            "Correct signal share": "{:.1%}",
+                            "Approx. 95% CI low": "{:.1%}",
+                            "Approx. 95% CI high": "{:.1%}",
+                            "Wrong direction share": "{:.1%}",
+                            "No-touch share": "{:.1%}",
+                        }, na_rep="—"),
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+                    ci_low = pd.to_numeric(wf_table["Approx. 95% CI low"], errors="coerce")
+                    if not (ci_low > 0.50).any():
+                        st.error(
+                            "Research gate: NOT PASSED. No variant has a lower approximate "
+                            "95% Wilson confidence bound above 50% directional correctness. "
+                            "The current feature-only models do not establish a stable edge."
+                        )
+                    st.caption(
+                        "Wilson intervals are approximate and ignore dependence/clustering. "
+                        "A positive interval would still require block-bootstrap confirmation "
+                        "and a net-of-cost execution backtest."
+                    )
+                else:
+                    st.warning("No completed variants were recorded in the walk-forward report.")
+            else:
+                st.error("The walk-forward report JSON could not be read.")
 
         st.info(
             "Planned progression: enrich inputs with verified live trade/order-book flow, "
