@@ -65,3 +65,50 @@ def test_barrier_labels_require_complete_minute_grid():
         assert "complete 1-minute grid" in str(exc)
     else:
         raise AssertionError("Expected a ValueError for irregular minute timestamps")
+
+
+def test_asymmetric_labels_use_separate_long_and_short_1r_stop_3r_target():
+    frame = make_barrier_frame()
+    # Long target at +3% is hit before its -1% stop.
+    frame.loc[2, ["high", "low"]] = [103.2, 99.8]
+    # Short target at -3% is hit before its +1% stop.
+    frame.loc[6, ["high", "low"]] = [100.2, 96.8]
+    output, labels, diagnostics, report = add_asymmetric_directional_labels(
+        frame, horizons={"15m": 4}, stop_multipliers=(1.0,), target_multipliers=(3.0,)
+    )
+    long_label = "asym_long_label_15m_sl1_tp3rv"
+    short_label = "asym_short_label_15m_sl1_tp3rv"
+    assert long_label in labels and short_label in labels
+    assert output.loc[0, long_label] == 1
+    assert output.loc[0, "asym_long_state_15m_sl1_tp3rv"] == 1
+    assert output.loc[5, short_label] == 1
+    assert output.loc[5, "asym_short_state_15m_sl1_tp3rv"] == 1
+    assert report[long_label]["reward_risk_ratio_before_costs"] == 3.0
+    assert report[short_label]["stop_multiple"] == 1.0
+
+
+def test_asymmetric_long_stop_first_and_same_minute_ambiguity():
+    frame = make_barrier_frame()
+    # Row 0: long stop at -1% is touched first, no +3% target.
+    frame.loc[1, ["high", "low"]] = [100.2, 98.8]
+    # Row 9: long target and stop are both reached in the same minute.
+    frame.loc[10, ["high", "low"]] = [103.2, 98.8]
+    output, labels, diagnostics, _ = add_asymmetric_directional_labels(
+        frame, horizons={"15m": 4}, stop_multipliers=(1.0,), target_multipliers=(3.0,)
+    )
+    label = "asym_long_label_15m_sl1_tp3rv"
+    state = "asym_long_state_15m_sl1_tp3rv"
+    assert output.loc[0, label] == -1
+    assert output.loc[0, state] == -1
+    assert output.loc[9, label] == 0
+    assert output.loc[9, state] == 2
+
+
+def test_asymmetric_labels_null_when_future_window_has_missing_ohlc():
+    frame = make_barrier_frame()
+    frame.loc[2, "high"] = np.nan
+    output, labels, diagnostics, _ = add_asymmetric_directional_labels(
+        frame, horizons={"15m": 4}, stop_multipliers=(1.0,), target_multipliers=(3.0,)
+    )
+    assert pd.isna(output.loc[0, labels[0]])
+    assert output.loc[0, diagnostics[0]] == -2
