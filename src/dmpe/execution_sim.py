@@ -55,6 +55,7 @@ class PreparedExecutionData:
     closes: np.ndarray
     feature_positions: dict[pd.Timestamp, int]
     feature_volatility: dict[str, np.ndarray]
+    feature_close: np.ndarray
 
 
 def prepare_execution_data(
@@ -81,6 +82,7 @@ def prepare_execution_data(
         lows=prices["low"].to_numpy(dtype="float64"),
         closes=prices["close"].to_numpy(dtype="float64"),
         feature_volatility=volatility_arrays,
+        feature_close=pd.to_numeric(features["close"], errors="coerce").to_numpy(dtype="float64"),
     )
 
 
@@ -174,6 +176,7 @@ def simulate_signal_set(
     price_positions = prepared.price_positions
     feature_positions = prepared.feature_positions
     times_ns = prepared.times_ns
+    feature_close = prepared.feature_close
     opens, highs = prepared.opens, prepared.highs
     lows, closes = prepared.lows, prepared.closes
 
@@ -227,13 +230,20 @@ def simulate_signal_set(
 
         raw_entry = float(open_window[0])
         entry_fill = raw_entry * (1.0 + direction * slippage)
+        reference_price = float(feature_close[feature_position])
+        if not np.isfinite(reference_price) or reference_price <= 0:
+            skipped["invalid_signal_close_reference"] = skipped.get("invalid_signal_close_reference", 0) + 1
+            continue
+        # Labels are anchored to the completed signal candle close. Keep the
+        # execution barriers anchored to that same point-in-time reference;
+        # entry gaps/slippage affect realized P&L, not the label geometry.
         distance_pct = multiplier * float(vol_pct)
         if distance_pct <= 0 or distance_pct >= 100:
             skipped["invalid_barrier_distance"] = skipped.get("invalid_barrier_distance", 0) + 1
             continue
 
-        target = entry_fill * (1.0 + direction * distance_pct / 100.0)
-        stop = entry_fill * (1.0 - direction * distance_pct / 100.0)
+        target = reference_price * (1.0 + direction * distance_pct / 100.0)
+        stop = reference_price * (1.0 - direction * distance_pct / 100.0)
         if direction == 1:
             stop_hits = np.flatnonzero(low_window <= stop)
             target_hits = np.flatnonzero(high_window >= target)
@@ -284,6 +294,7 @@ def simulate_signal_set(
             "validation_threshold": signal_row.get("validation_threshold"),
             "volatility_scale_pct": float(vol_pct),
             "barrier_distance_pct": distance_pct,
+            "signal_close_reference_price": reference_price,
             "raw_entry_price": raw_entry,
             "entry_fill_price": entry_fill,
             "target_price": target,
