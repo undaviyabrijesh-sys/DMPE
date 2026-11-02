@@ -201,7 +201,7 @@ def simulate_signal_set(
             continue
 
         end_position = entry_position + horizon_minutes
-        if end_position > len(prices):
+        if end_position > len(times_ns):
             skipped["incomplete_future_price_window"] = skipped.get("incomplete_future_price_window", 0) + 1
             continue
         window_times_ns = times_ns[entry_position:end_position]
