@@ -43,11 +43,19 @@
 - Open interest: 24,940 hourly rows; continuous hourly timestamps over its actual coverage window.
 - Historical trades and historical order-book depth are not available from these candle files.
 
+## First baseline findings (exploratory single holdout)
+
+- The regularized histogram-gradient-boosting classifier improved balanced accuracy versus the prior-class benchmark in most variants, but overall balanced accuracy remained low (roughly 0.34–0.44 across the 9 variants).
+- One candidate, 15-minute horizon with a 0.75x horizon-RV barrier, generated 87 confidence-gated test calls at a threshold of 0.60 selected on validation. Correct label share was 58.6%; wrong-direction share 35.6%; no-touch share 5.7%.
+- Its approximate Wilson 95% binomial interval is about 48%–68%, which includes 50%. The interval also ignores serial dependence, and the 9 variants/models were compared on the same holdout. This is not evidence of a stable tradable edge.
+- All other tested confidence-gated variants were weaker (approximately 39%–44% correct share) or inactive due to insufficient validation signals.
+- Decision: no strategy is approved. The 15m/0.75x candidate is only a hypothesis to re-test in repeated walk-forward periods and a cost-aware simulator.
+
 ## Next milestones
 1. Review the Stage 1 profile, especially large early traded-price outages and funding-rate interpretation.
 2. Reconstruct trade aggressor flow and order-book changes only after validating the live exchange event schema.
 3. Define event-based directional labels and barrier semantics.
-4. Build chronological train/validation/test datasets with purge/embargo for overlapping forward labels.
+4. Complete the four-fold expanding-window walk-forward experiment with validation-only threshold selection and purged/embargoed boundaries.
 5. Compare simple baselines before ML; then evaluate candidate classifiers/regressors using walk-forward validation.
 6. Include fees, spread, slippage, funding, latency, turnover, drawdown and calibration.
 7. Register only validated models in the desk; add risk controls and paper trading before any live execution decision.
