@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from dmpe.orderflow import aggregate_event_records, parse_book_event, parse_trade_event
+from dmpe.orderflow import (aggregate_event_records, extract_funding_observations, parse_book_event, parse_funding_event, parse_trade_event)
 
 
 def test_delta_buyer_role_infers_aggressor_side_without_guessing_unknowns():
@@ -63,3 +63,33 @@ def test_aggregation_timestamps_completed_minute_and_preserves_missingness():
     assert pd.isna(frame.loc[1, "trade_total_volume"])
     assert frame.loc[2, "trade_feed_observed"] == 1
     assert frame.loc[2, "l2_feed_observed"] == 0
+
+
+def test_funding_snapshot_preserves_rate_and_exact_next_realization_time():
+    record = {
+        "received_at": "2024-01-01T00:00:00Z",
+        "event": {
+            "type": "funding_rate",
+            "sy": "BTCUSD",
+            "fr": "0.0001",
+            "fi": 28800,
+            "ts": 1704067200000000,
+            "nfr": 1704096000000000,
+        },
+    }
+    parsed = parse_funding_event(record, record["event"])
+    assert parsed is not None
+    assert parsed["funding_rate"] == 0.0001
+    assert parsed["funding_interval_seconds"] == 28800
+    assert parsed["next_funding_realization"] == pd.Timestamp("2024-01-01T08:00:00Z")
+    frame = extract_funding_observations([record])
+    assert len(frame) == 1
+    assert frame.loc[0, "symbol"] == "BTCUSD"
+
+
+def test_funding_snapshot_rejects_missing_or_past_realization_timestamp():
+    record = {"event": {
+        "type": "funding_rate", "fr": "0.0001", "fi": 28800,
+        "ts": 1704067200000000, "nfr": 1704067100000000,
+    }}
+    assert parse_funding_event(record, record["event"]) is None
