@@ -11,3 +11,11 @@ data/raw/**
 artifacts/
 models/
 *.log
+
+# Local/CI research outputs and downloaded workflow artifacts
+data/processed/**
+!data/processed/.gitkeep
+stage1_output/
+stage2_output/
+stage3_output/
+.streamlit/secrets.toml
