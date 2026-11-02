@@ -214,7 +214,7 @@ def read_jsonl_tail(path: Path, limit: int = 1500) -> list[dict[str, Any]]:
                 handle.seek(end)
                 block = handle.read(size)
                 chunks[:0] = block
-                newline_count += block.count(b"\\n")
+                newline_count += block.count(b"\n")
         lines = bytes(chunks).decode("utf-8", errors="replace").splitlines()[-limit:]
         for line in lines:
             try:
