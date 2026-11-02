@@ -93,3 +93,41 @@ def test_funding_snapshot_rejects_missing_or_past_realization_timestamp():
         "ts": 1704067200000000, "nfr": 1704067100000000,
     }}
     assert parse_funding_event(record, record["event"]) is None
+
+
+def test_orderflow_features_join_exact_minute_and_keep_missingness():
+    from dmpe.orderflow import attach_orderflow_features
+
+    times = pd.date_range("2024-01-01T00:00:00Z", periods=8, freq="1min")
+    base = pd.DataFrame({"time": times, "close": np.arange(100, 108)})
+    flow = pd.DataFrame({
+        "time": times[2:],
+        "trade_feed_observed": 1,
+        "l2_feed_observed": 1,
+        "trade_signed_volume": np.arange(6, dtype=float),
+        "trade_volume_imbalance": np.full(6, 0.25),
+        "l2_depth_imbalance_5_mean": np.full(6, 0.10),
+        "l2_microprice_mid_bps_mean": np.full(6, 0.5),
+        "l2_spread_bps_mean": np.full(6, 1.0),
+    })
+    merged, added = attach_orderflow_features(base, flow)
+    assert "of_trade_signed_volume" in added
+    assert pd.isna(merged.loc[0, "of_trade_signed_volume"])
+    assert merged.loc[2, "of_trade_signed_volume"] == 0.0
+    assert pd.isna(merged.loc[5, "of_trade_signed_volume_mean_5m"])
+    assert merged.loc[6, "of_trade_signed_volume_mean_5m"] == 2.0
+    assert merged.loc[6, "of_l2_feed_coverage_5m"] == 1.0
+
+
+def test_orderflow_join_rejects_duplicate_timestamps():
+    from dmpe.orderflow import attach_orderflow_features
+
+    times = pd.date_range("2024-01-01T00:00:00Z", periods=2, freq="1min")
+    base = pd.DataFrame({"time": times})
+    flow = pd.DataFrame({"time": [times[0], times[0]], "trade_signed_volume": [1, 2]})
+    try:
+        attach_orderflow_features(base, flow)
+    except ValueError as exc:
+        assert "unique minute-close" in str(exc)
+    else:
+        raise AssertionError("Expected duplicate minute timestamps to be rejected")
