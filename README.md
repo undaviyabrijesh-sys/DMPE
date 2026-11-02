@@ -29,6 +29,27 @@ Or start a finite capture in GitHub Actions from **Actions → DMPE live market-
 
 Raw data are intentionally excluded from Git commits. Download the workflow artifacts from the repository's Actions page.
 
+## Streamlit Quant Desk
+DMPE includes a local Streamlit research desk with:
+- Interactive BTCUSD candlesticks, EMA overlays, volume, multi-horizon returns, ATR and realized-volatility descriptors.
+- Historical Parquet/CSV upload and timeframe aggregation (only to coarser timeframes than the source).
+- Auto-refreshing live JSONL tape, recent trades and L2 displayed-size imbalance when those events are present.
+- Backfill report, candle audit and basic data-integrity panels.
+- An explicit model gate showing whether a validated model is registered.
+
+Extract the downloaded workflow artifact so its contents sit under this repository's `data/raw/` directory, then launch:
+```bash
+pip install -r requirements.txt
+streamlit run app.py
+```
+For live events, run the recorder separately in another terminal:
+```bash
+python scripts/capture_live.py --symbol BTCUSD
+```
+The live pane reads the JSONL files produced by that recorder. The Streamlit app does not start a recorder, request exchange credentials, or place orders. The app can also be deployed as a private Streamlit service by pointing it at a persistent data directory using the `DMPE_DATA_DIR` environment variable.
+
+**Important:** the current desk is a data and research interface, not a proven trading system. It intentionally displays FLAT (0) until a model passes chronological walk-forward validation and net-of-cost evaluation. EMA, return, volatility and order-book metrics are descriptive candidate features, not trade recommendations.
+
 ## Install locally
 Python 3.11+ recommended:
 ```bash
@@ -49,6 +70,7 @@ PYTHONPATH=src pytest -q
 - `.github/workflows/tests.yml`: automated tests
 - `.github/workflows/historical-backfill.yml`: 5-year historical data job and artifact
 - `.github/workflows/live-capture.yml`: manually started finite live recorder
+- `app.py`: Streamlit Quant Desk
 - `scripts/`: backfill, live capture and quality audit
 - `src/dmpe/`: REST client and WebSocket recorder
 - `data/raw/`: local market data, intentionally excluded from Git
