@@ -11,4 +11,5 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install -r requirements.txt
+      - run: python -m compileall -q app.py src scripts
       - run: PYTHONPATH=src pytest -q
