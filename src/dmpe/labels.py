@@ -1,8 +1,10 @@
-"""First-touch volatility-barrier labels for DMPE.
+"""First-touch, horizon-aligned realized-volatility barrier labels for DMPE.
 
-The labels are symmetric upper/lower barriers measured in the signal-time ATR.
-If both levels are first touched in the same 1-minute candle, the direction is
-marked ambiguous (diagnostic state=2) and the directional label is neutral (0).
+Each horizon uses its own trailing realized-volatility estimate, available at
+signal time: 15m uses realized_vol_15m_pct, 1h uses realized_vol_60m_pct,
+and 3h uses realized_vol_180m_pct. Barriers are symmetric around the signal
+close. If both levels are first touched in the same 1-minute candle, direction
+is ambiguous (diagnostic state=2); do not infer intraminute order from OHLC.
 Incomplete future windows are null and must be excluded from training.
 """
 from __future__ import annotations
@@ -16,6 +18,11 @@ from numpy.lib.stride_tricks import sliding_window_view
 DEFAULT_HORIZONS = {"15m": 15, "1h": 60, "3h": 180}
 DEFAULT_MULTIPLIERS = (0.75, 1.0, 1.5)
 CHUNK_ROWS = 20_000
+DEFAULT_VOLATILITY_COLUMNS = {
+    "15m": "realized_vol_15m_pct",
+    "1h": "realized_vol_60m_pct",
+    "3h": "realized_vol_180m_pct",
+}
 
 
 def _multiplier_tag(value: float) -> str:
@@ -26,12 +33,21 @@ def add_barrier_labels(
     frame: pd.DataFrame,
     horizons: dict[str, int] | None = None,
     multipliers: tuple[float, ...] = DEFAULT_MULTIPLIERS,
+    volatility_columns: dict[str, str] | None = None,
 ) -> tuple[pd.DataFrame, list[str], list[str], dict[str, Any]]:
     """Append first-touch labels and diagnostics to a minute-grid feature frame."""
     horizons = horizons or DEFAULT_HORIZONS
     if not multipliers or any(not np.isfinite(x) or x <= 0 for x in multipliers):
         raise ValueError("Barrier multipliers must be finite positive values.")
-    required = {"time", "high", "low", "close", "atr_14m_pct"}
+    volatility_columns = volatility_columns or DEFAULT_VOLATILITY_COLUMNS
+    missing_horizons = set(horizons).difference(volatility_columns)
+    if missing_horizons:
+        raise ValueError(
+            "No volatility-column mapping supplied for horizons: "
+            f"{sorted(missing_horizons)}"
+        )
+    required = {"time", "high", "low", "close"}
+    required.update(volatility_columns[name] for name in horizons)
     missing = required.difference(frame.columns)
     if missing:
         raise ValueError(f"Barrier labelling requires columns: {sorted(missing)}")
@@ -45,7 +61,11 @@ def add_barrier_labels(
     high = pd.to_numeric(out["high"], errors="coerce").to_numpy(dtype="float64")
     low = pd.to_numeric(out["low"], errors="coerce").to_numpy(dtype="float64")
     close = pd.to_numeric(out["close"], errors="coerce").to_numpy(dtype="float64")
-    atr_pct = pd.to_numeric(out["atr_14m_pct"], errors="coerce").to_numpy(dtype="float64")
+    volatility_scales = {
+        horizon_name: pd.to_numeric(out[column], errors="coerce").to_numpy(dtype="float64")
+        for horizon_name, column in volatility_columns.items()
+        if horizon_name in horizons
+    }
     n_rows = len(out)
 
     label_columns: list[str] = []
@@ -65,9 +85,9 @@ def add_barrier_labels(
         max_starts = max(n_rows - horizon, 0)
         for multiplier in multipliers:
             tag = _multiplier_tag(float(multiplier))
-            label_name = f"barrier_label_{horizon_name}_{tag}atr"
-            state_name = f"barrier_state_{horizon_name}_{tag}atr"
-            bars_name = f"barrier_bars_{horizon_name}_{tag}atr"
+            label_name = f"barrier_label_{horizon_name}_{tag}rv"
+            state_name = f"barrier_state_{horizon_name}_{tag}rv"
+            bars_name = f"barrier_bars_{horizon_name}_{tag}rv"
 
             labels = np.full(n_rows, np.nan, dtype="float32")
             # -2 = invalid/incomplete; -1 = down first; 0 = no touch;
@@ -82,13 +102,13 @@ def add_barrier_labels(
                     l_win = windows_low[start:end]
                     c_win = windows_close[start:end]
                     entry = close[start:end]
-                    atr = atr_pct[start:end]
+                    volatility_pct = volatility_scales[horizon_name][start:end]
 
                     valid = (
                         np.isfinite(entry)
-                        & np.isfinite(atr)
+                        & np.isfinite(volatility_pct)
                         & (entry > 0)
-                        & (atr > 0)
+                        & (volatility_pct > 0)
                         & np.isfinite(h_win).all(axis=1)
                         & np.isfinite(l_win).all(axis=1)
                         & np.isfinite(c_win).all(axis=1)
@@ -96,8 +116,8 @@ def add_barrier_labels(
                     if not valid.any():
                         continue
 
-                    upper = entry * (1.0 + multiplier * atr / 100.0)
-                    lower = entry * (1.0 - multiplier * atr / 100.0)
+                    upper = entry * (1.0 + multiplier * volatility_pct / 100.0)
+                    lower = entry * (1.0 - multiplier * volatility_pct / 100.0)
                     hit_up = h_win >= upper[:, None]
                     hit_down = l_win <= lower[:, None]
                     has_up = hit_up.any(axis=1)
@@ -148,7 +168,8 @@ def add_barrier_labels(
             ))
             report[label_name] = {
                 "horizon_minutes": horizon,
-                "symmetric_barrier_multiple_of_signal_time_atr": float(multiplier),
+                "symmetric_barrier_multiple_of_horizon_aligned_realized_volatility": float(multiplier),
+                "volatility_column": volatility_columns[horizon_name],
                 "label_mapping": {"-1": "down barrier first", "0": "no touch or ambiguous",
                                   "+1": "up barrier first", "null": "incomplete/invalid"},
                 "state_counts": state_counts,
