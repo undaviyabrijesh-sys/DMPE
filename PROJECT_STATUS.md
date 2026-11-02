@@ -1,30 +1,27 @@
 # DMPE project status
 
-## Milestone 0 — Bootstrap
-- [x] Project layout and research guardrails
-- [x] Delta Exchange India historical candle client
-- [x] Live public feed recorder (trades, L2 top-15, 1m candles)
-- [x] Basic candle validation script
-- [x] GitHub Actions test workflow
-- [x] Publish into dedicated private GitHub repository
-- [ ] Run first live capture and inspect schema/gaps
-- [ ] Build ingestion monitoring and raw-feed reconciliation
+## Milestone 0 — Data-pipeline bootstrap
+- [x] Private GitHub repository and project layout
+- [x] Historical REST client with 2,000-candle paging and rate-limit backoff
+- [x] Historical bundle job for traded price, mark price, funding and open interest
+- [x] Live public recorder for trades, L2, candles, ticker/OI, mark price and funding
+- [x] Daily JSONL raw event storage
+- [x] Candle data-quality audit
+- [x] GitHub Actions workflows for tests, historical backfill and finite live capture
+- [ ] Verify historical API availability and row coverage from the first workflow artifact
+- [ ] Start first finite live capture and inspect event schema/gaps
 
-## Milestone 1 — Historical data audit
-- [ ] Retrieve 1m BTCUSD candles across available history
-- [ ] Retrieve mark-price, funding and open-interest series where supported
-- [ ] Audit missing intervals, duplicate bars and contract metadata
-- [ ] Determine historical availability of trade-by-trade and order-book data
+## Initial historical request
+- Five years requested by default (1825 days).
+- BTCUSD and MARK:BTCUSD: 1-minute bars.
+- FUNDING:BTCUSD and OI:BTCUSD: 1-hour bars.
+- Actual coverage must be read from the report; no minimum history is assumed.
 
-## Milestone 2 — Features and labels
-- [ ] Define event-based labels before model selection
-- [ ] Build flow, volatility, trend, liquidity and positioning features
-- [ ] Use chronological and walk-forward validation only
+## Next milestones
+1. Audit gaps, duplicates, timestamps and data cadence.
+2. Reconstruct trade aggressor flow and order-book imbalance from raw live events.
+3. Determine whether additional third-party historical tick/order-book sources are required.
+4. Define event-based labels, then build leak-safe chronological feature sets.
+5. Compare baseline models using walk-forward validation and net-of-cost metrics.
 
-## Milestone 3 — Models and evaluation
-- [ ] Establish simple baselines
-- [ ] Compare calibrated logistic regression and gradient boosting
-- [ ] Evaluate net expectancy, profit factor, drawdown, calibration and turnover
-- [ ] Paper-trade only after robust out-of-sample validation
-
-No live order execution is enabled.
+No order execution is enabled. Research signals are not trading instructions.
