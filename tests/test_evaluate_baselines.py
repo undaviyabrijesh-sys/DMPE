@@ -9,6 +9,7 @@ from evaluate_baselines import (
     _predict_direction,
     _signal_metrics,
     chronological_splits,
+    wilson_interval,
 )
 
 
@@ -49,3 +50,11 @@ def test_chronological_splits_purge_and_embargo_one_full_horizon():
     assert val_start - train_end >= pd.Timedelta(minutes=30)
     assert test_start - val_end >= pd.Timedelta(minutes=30)
     assert info["embargo_minutes_each_side_of_cut"] == 15
+
+
+def test_wilson_interval_reflects_uncertainty_from_small_signal_samples():
+    interval = wilson_interval(51, 87)
+    assert interval is not None
+    assert interval[0] < 0.50 < interval[1]
+    assert interval[0] < 51 / 87 < interval[1]
+    assert wilson_interval(0, 0) is None
