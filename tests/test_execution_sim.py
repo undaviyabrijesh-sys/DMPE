@@ -21,6 +21,7 @@ def make_inputs():
     })
     features = pd.DataFrame({
         "time": times,
+        "close": closes,
         "realized_vol_15m_pct": 0.20,
         "realized_vol_60m_pct": 0.20,
         "realized_vol_180m_pct": 0.20,
