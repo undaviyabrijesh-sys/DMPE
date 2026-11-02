@@ -1,0 +1,54 @@
+name: DMPE live order-flow feature build
+
+on:
+  workflow_dispatch:
+    inputs:
+      capture_run_id:
+        description: "GitHub Actions run ID containing a completed live-capture artifact"
+        required: true
+        default: "41492964835"
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build-orderflow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out DMPE
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Download raw live-capture artifact
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.capture_run_id }}
+          name: dmpe-live-capture-${{ inputs.capture_run_id }}
+          path: raw_capture
+
+      - name: Build trade and L2 minute features
+        run: |
+          python scripts/build_live_orderflow_dataset.py \
+            --input-dir raw_capture \
+            --output-dir orderflow_output/processed
+
+      - name: Upload order-flow feature artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dmpe-live-orderflow-features
+          path: orderflow_output
+          if-no-files-found: error
+          retention-days: 30
