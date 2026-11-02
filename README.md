@@ -96,6 +96,16 @@ Delta's public trade event documents `r` as `buyer_role`: `t` means the buyer wa
 
 Alternatively, run **Actions → DMPE live order-flow feature build** and provide the run ID of a completed live-capture workflow. This creates the same Parquet/CSV/report bundle as a 30-day artifact. Extract the resulting Parquet into `orderflow_output/processed/`; the Streamlit Live Tape panel will show its latest aggregated pressure, depth and spread readings.
 
+To join live features to the candle feature dataset without lookahead or forward-fill:
+```bash
+python scripts/merge_live_orderflow_features.py \\
+  --feature-file stage1_output/processed/dmpe_BTCUSD_1m_features.parquet \\
+  --orderflow-file orderflow_output/processed/dmpe_BTCUSD_live_orderflow_1m.parquet \\
+  --schema-file stage1_output/processed/feature_schema.json \\
+  --output-dir orderflow_merged
+```
+The merge is exact on UTC minute-close timestamps. Missing capture rows remain missing; rolling 5m/15m descriptors require complete windows. Training must use a chronological period after the actual recorder start and should include feed-coverage checks.
+
 These microstructure features start only when the WebSocket recorder is running; the historical candle dataset cannot reconstruct past trades or order-book states. They must be collected over time and independently evaluated before being added to a trading model.
 
 ## Stage 3 — Repeated walk-forward confirmation
