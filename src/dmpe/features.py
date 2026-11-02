@@ -122,7 +122,18 @@ def _rolling_forward(values: pd.Series, window: int, operation: str) -> pd.Serie
 def _regular_hourly(frame: pd.DataFrame | None, value_name: str) -> pd.DataFrame | None:
     if frame is None or frame.empty:
         return None
-    hourly = normalize_ohlcv(frame).set_index("time").sort_index()
+    # Funding can be negative or exactly zero; do not run it through the
+    # positive-price OHLC validator or logarithms. For both hourly series only
+    # the timestamped close observation is used as a point-in-time scalar.
+    hourly = frame[["time", "close"]].copy()
+    hourly["time"] = pd.to_datetime(hourly["time"], utc=True, errors="coerce")
+    hourly["close"] = pd.to_numeric(hourly["close"], errors="coerce")
+    hourly = (
+        hourly.dropna(subset=["time", "close"])
+        .sort_values("time")
+        .drop_duplicates("time")
+        .set_index("time")
+    )
     start, end = hourly.index.min().floor("h"), hourly.index.max().floor("h")
     full_index = pd.date_range(start, end, freq="1h", tz="UTC")
     hourly = hourly.reindex(full_index)
@@ -130,13 +141,27 @@ def _regular_hourly(frame: pd.DataFrame | None, value_name: str) -> pd.DataFrame
     out[value_name] = hourly["close"].astype(float)
     safe_lag = pd.Timedelta(hours=1, minutes=1)
     out["available_at"] = out.index + safe_lag
-    log_value = np.log(out[value_name].where(out[value_name] > 0))
-    for hours in (1, 4, 24):
-        out[f"{value_name}_log_change_{hours}h"] = log_value.diff(hours)
-        if hours > 1:
-            valid_count = log_value.notna().astype("int8").rolling(hours + 1, min_periods=hours + 1).sum()
-            out.loc[valid_count < hours + 1, f"{value_name}_log_change_{hours}h"] = np.nan
-    out[f"{value_name}_age_minutes"] = 0.0
+
+    if value_name == "funding_rate":
+        # Differences remain meaningful across both positive and negative rates.
+        for hours in (1, 4, 24):
+            col = f"{value_name}_change_{hours}h"
+            out[col] = out[value_name].diff(hours)
+            valid_count = out[value_name].notna().astype("int8").rolling(
+                hours + 1, min_periods=hours + 1
+            ).sum()
+            out.loc[valid_count < hours + 1, col] = np.nan
+    else:
+        positive = out[value_name].where(out[value_name] > 0)
+        log_value = np.log(positive)
+        for hours in (1, 4, 24):
+            col = f"{value_name}_log_change_{hours}h"
+            out[col] = log_value.diff(hours)
+            valid_count = log_value.notna().astype("int8").rolling(
+                hours + 1, min_periods=hours + 1
+            ).sum()
+            out.loc[valid_count < hours + 1, col] = np.nan
+
     return out.reset_index(names="source_time")
 
 
@@ -262,8 +287,8 @@ def build_feature_frame(
     oi_hourly = _regular_hourly(oi_frame, "open_interest")
     base = _asof_hourly(base, funding_hourly, "funding", tolerance_hours=3)
     base = _asof_hourly(base, oi_hourly, "oi", tolerance_hours=2)
-    for col in ("funding_funding_rate", "funding_funding_rate_log_change_1h",
-                "funding_funding_rate_log_change_4h", "funding_funding_rate_log_change_24h",
+    for col in ("funding_funding_rate", "funding_funding_rate_change_1h",
+                "funding_funding_rate_change_4h", "funding_funding_rate_change_24h",
                 "funding_age_minutes", "oi_open_interest", "oi_open_interest_log_change_1h",
                 "oi_open_interest_log_change_4h", "oi_open_interest_log_change_24h",
                 "oi_age_minutes"):
