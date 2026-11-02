@@ -11,7 +11,7 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 from dmpe.features import build_feature_frame  # noqa: E402
-from dmpe.labels import add_barrier_labels  # noqa: E402
+from dmpe.labels import add_asymmetric_directional_labels, add_barrier_labels  # noqa: E402
 
 
 def parse_multipliers(value: str) -> tuple[float, ...]:
@@ -57,6 +57,15 @@ def main() -> None:
         features, multipliers=args.barrier_multipliers
     )
     label_columns.extend(barrier_labels)
+    features, asymmetric_labels, asymmetric_diagnostics, asymmetric_summary = (
+        add_asymmetric_directional_labels(
+            features,
+            stop_multipliers=(1.0,),
+            target_multipliers=(3.0,),
+        )
+    )
+    label_columns.extend(asymmetric_labels)
+    diagnostic_columns.extend(asymmetric_diagnostics)
 
     # Compact model inputs and targets without downcasting retained raw OHLCV.
     for column in feature_columns + label_columns:
@@ -92,6 +101,20 @@ def main() -> None:
             "Forward return and future max/min excursion columns are evaluation targets only. "
             "Never include target_* columns in model inputs."
         ),
+        "asymmetric_label_policy": (
+            "Separate long and short first-touch outcomes. For long: target +3x horizon RV, "
+            "stop -1x; for short: target -3x, stop +1x. +1=target first, -1=stop first, "
+            "0=neither touched, state=2=same-minute ambiguous (exclude), state=-2=invalid/incomplete. "
+            "The long and short targets are independent binary prediction tasks; do not collapse "
+            "them into a single three-class label."
+        ),
+        "asymmetric_barrier_configuration": {
+            "stop_multipliers": [1.0],
+            "target_multipliers": [3.0],
+            "reward_risk_ratio_before_costs": 3.0,
+            "horizons_minutes": {"15m": 15, "1h": 60, "3h": 180},
+            "policy": "Research-only preregistered 1R stop / 3R target; not selected from test results."
+        },
         "barrier_label_policy": (
             "barrier_label_* is +1 when the symmetric upper horizon-aligned realized-volatility "
             "barrier is touched first, -1 when the lower barrier is touched first, and 0 for no touch or same-minute "
@@ -136,6 +159,7 @@ def main() -> None:
         "diagnostics": len(diagnostic_columns),
         "output_file": str(output_path),
         "barrier_class_counts": barrier_summary,
+        "asymmetric_class_counts": asymmetric_summary,
         "null_rates": {
             col: float(features[col].isna().mean())
             for col in feature_columns + label_columns
