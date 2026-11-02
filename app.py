@@ -34,6 +34,10 @@ WALK_FORWARD_REPORT_PATHS = [
     Path(os.getenv("DMPE_STAGE3_DIR", ROOT / "stage3_output")) / "walk_forward_report.json",
     ROOT / "artifacts" / "stage3_output" / "walk_forward_report.json",
 ]
+EXECUTION_REPORT_PATHS = [
+    Path(os.getenv("DMPE_STAGE4_DIR", ROOT / "stage4_output")) / "execution_simulation.json",
+    ROOT / "artifacts" / "stage4_output" / "execution_simulation.json",
+]
 ORDERFLOW_FEATURE_PATH = Path(os.getenv(
     "DMPE_ORDERFLOW_FILE",
     ROOT / "orderflow_output" / "processed" / "dmpe_BTCUSD_live_orderflow_1m.parquet",
@@ -416,6 +420,32 @@ def read_orderflow_tail(path_str: str, modified_ns: int) -> pd.DataFrame:
     ]
     available = pd.read_parquet(path_str, columns=columns)
     return available.tail(60).reset_index(drop=True)
+
+
+
+
+def discover_execution_report() -> Path | None:
+    return next((path for path in EXECUTION_REPORT_PATHS if path.exists()), None)
+
+
+def execution_scorecard(report: dict[str, Any]) -> pd.DataFrame:
+    rows = []
+    for item in report.get("results", []):
+        rows.append({
+            "Horizon": item.get("horizon"),
+            "Barrier × RV": item.get("barrier_multiple"),
+            "Slippage bps / side": item.get("slippage_bps_per_side"),
+            "Executed trades": item.get("executed_trades", item.get("trades", 0)),
+            "Skipped signals": sum((item.get("skipped") or {}).values()),
+            "Win rate": item.get("win_rate"),
+            "Profit factor": item.get("profit_factor"),
+            "Net PnL USD": item.get("net_pnl_usd_per_configured_size"),
+            "Fees USD": item.get("fees_usd"),
+            "Expectancy USD": item.get("expectancy_usd_per_trade"),
+            "Max drawdown USD": item.get("max_drawdown_usd"),
+            "Mean net return": item.get("mean_net_return_pct_on_entry_notional"),
+        })
+    return pd.DataFrame(rows)
 
 
 def main() -> None:
@@ -881,6 +911,46 @@ def main() -> None:
                     st.warning("No completed variants were recorded in the walk-forward report.")
             else:
                 st.error("The walk-forward report JSON could not be read.")
+
+        execution_path = discover_execution_report()
+        if execution_path is None:
+            st.info(
+                "No execution-cost simulation report found. Download the "
+                "dmpe-execution-cost-simulation artifact and extract execution_simulation.json "
+                "into stage4_output/ (or set DMPE_STAGE4_DIR)."
+            )
+        else:
+            execution_report = load_report(execution_path)
+            if execution_report:
+                st.markdown("**Fee and slippage sensitivity · walk-forward test signals**")
+                st.caption(
+                    f"Simulation created {execution_report.get('created_at_utc', 'unknown')} · "
+                    f"configured lots: {execution_report.get('inputs', {}).get('contracts', 'n/a')}"
+                )
+                st.warning(
+                    "This is a price-bar execution approximation, not a live-fill replay. "
+                    "Funding is excluded pending settlement-time validation; fixed slippage scenarios "
+                    "are assumptions, not measured historical market impact."
+                )
+                cost_table = execution_scorecard(execution_report)
+                if not cost_table.empty:
+                    st.dataframe(
+                        cost_table.style.format({
+                            "Win rate": "{:.1%}",
+                            "Profit factor": "{:.2f}",
+                            "Net PnL USD": "{:.4f}",
+                            "Fees USD": "{:.4f}",
+                            "Expectancy USD": "{:.5f}",
+                            "Max drawdown USD": "{:.4f}",
+                            "Mean net return": "{:.3f}%",
+                        }, na_rep="—"),
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+                else:
+                    st.warning("The execution report contains no completed slippage scenarios.")
+            else:
+                st.error("The execution simulation JSON could not be read.")
 
         st.info(
             "Planned progression: enrich inputs with verified live trade/order-book flow, "
