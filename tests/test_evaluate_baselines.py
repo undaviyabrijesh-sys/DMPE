@@ -19,9 +19,11 @@ def test_probability_gate_requires_confident_direction():
         [0.10, 0.20, 0.70],
         [0.25, 0.50, 0.25],
         [0.45, 0.10, 0.45],
+        [0.05, 0.48, 0.47],
+        [0.47, 0.50, 0.03],
     ])
     signals = _predict_direction(probabilities, classes, 0.60)
-    assert signals.tolist() == [-1, 1, 0, 0]
+    assert signals.tolist() == [-1, 1, 0, 0, 0, 0]
 
 
 def test_signal_metrics_separate_directional_hits_and_neutral_outcomes():
