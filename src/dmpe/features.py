@@ -15,7 +15,7 @@ import pandas as pd
 PRICE_COLUMNS = ["time", "open", "high", "low", "close", "volume"]
 HORIZONS_MINUTES = {"15m": 15, "1h": 60, "3h": 180}
 LAG_MINUTES = (1, 3, 5, 15, 30, 60, 180)
-VOL_WINDOWS = (15, 60, 240)
+VOL_WINDOWS = (15, 60, 180, 240)
 TREND_WINDOWS = (15, 60, 240)
 
 
