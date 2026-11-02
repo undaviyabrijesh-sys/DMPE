@@ -180,7 +180,7 @@ def _aggregate_trade_minute(events: list[dict[str, Any]]) -> dict[str, Any]:
         "trade_last_price": float(prices[-1]),
         "trade_range_bps": (float(prices.max()) / float(prices.min()) - 1.0) * 10_000.0,
         "trade_tick_return_std": float(np.std(log_tick_returns)) if len(log_tick_returns) else np.nan,
-        "trade_mean_interarrival_ms": float(np.mean(time_deltas_ms)) if time_deltas_ms else np.nan,
+        "trade_mean_interarrival_ms": float(np.mean(time_deltas_ms)) if len(time_deltas_ms) else np.nan,
         "trade_median_size": float(np.median(sizes)),
         "trade_large_print_count": int((sizes >= np.quantile(sizes, 0.95)).sum()),
         "trade_unknown_role_count": int(sum(side == "unknown" for side in sides)),
