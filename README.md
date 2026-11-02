@@ -174,3 +174,24 @@ GitHub Actions is intended for finite captures, not a persistent WebSocket proce
 - `deploy/vps/README.md`
 
 The service runs the public BTCUSD recorder under a non-root account, restarts after disconnects, and writes daily JSONL files to persistent storage. It requires no API keys and cannot place orders. Provisioning the VPS and configuring durable off-host backups still require the account owner.
+
+
+## Binance historical aggregate-trade proxy
+
+Binance's public data archive is reachable at the archive root and its official repository documents USD-M futures aggTrades with timestamp and buyer-maker flag. DMPE now includes a checksum-verified monthly downloader and a minute-feature builder:
+
+- `scripts/download_binance_aggtrades.py` downloads one BTCUSDT USD-M futures monthly archive and verifies its SHA-256 checksum.
+- `scripts/build_binance_flow_features.py` creates UTC minute-close features: signed base-volume imbalance, trade count, large-print notional share (fixed $100,000 notional threshold), signed-notional imbalance and 5m flow acceleration.
+- `scripts/merge_binance_flow_features.py` performs a one-to-one exact UTC close-timestamp join. Unmatched minutes remain missing; no as-of join or forward-fill is permitted.
+- `.github/workflows/binance-aggtrades-monthly.yml` runs a month at a time and uploads both the verified source ZIP/checksum and derived Parquet/report artifacts for 90 days. Dispatch it with a year and month.
+
+Example local workflow:
+```bash
+python scripts/download_binance_aggtrades.py --symbol BTCUSDT --year 2024 --month 1 --output-dir binance_input
+python scripts/build_binance_flow_features.py --archive binance_input/BTCUSDT-aggTrades-2024-01.zip --year 2024 --month 1 --output-dir binance_output
+python scripts/merge_binance_flow_features.py --feature-file stage1_output/processed/dmpe_BTCUSD_1m_features.parquet --flow-file binance_output/binance_BTCUSDT_aggtrade_flow_1m_2024-01.parquet --output-dir binance_merged
+```
+
+**Important:** this is Binance aggressor-flow proxy data, not historical Delta order flow. BTC cross-venue price correlation does not guarantee that signed-flow features transfer to Delta. Binance aggTrades contain no historical L2 queue position and cannot calibrate Delta maker fills. Keep the Binance proxy and Delta live-flow columns distinct; only forward Delta capture can validate venue transfer and fill assumptions.
+
+The revised preregistration in `research/PREREGISTERED_ASYMMETRIC_EXPERIMENT.md` freezes exactly two confirmatory horizons: 1h and 3h, each with a 1R stop and 3R target. The 15m horizon is excluded. Existing inspected Stage 3/4 test blocks are disqualified; the prospective final holdout remains 2026-11-03 through 2027-01-02 UTC.
