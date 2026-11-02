@@ -221,9 +221,11 @@ def evaluate_one(
     x_test = x.iloc[test_idx][usable_features].astype("float32")
 
     dummy = DummyClassifier(strategy="prior")
-    dummy.fit(x_train, y_train)
-    dummy_pred = dummy.predict(x_test)
-    dummy_prob = dummy.predict_proba(x_test)
+    dummy_x_train = np.zeros((len(y_train), 1), dtype="float32")
+    dummy_x_test = np.zeros((len(y_test), 1), dtype="float32")
+    dummy.fit(dummy_x_train, y_train)
+    dummy_pred = dummy.predict(dummy_x_test)
+    dummy_prob = dummy.predict_proba(dummy_x_test)
     result["majority_prior_baseline"] = _multiclass_metrics(
         y_test, dummy_pred, dummy_prob, dummy.classes_
     )
