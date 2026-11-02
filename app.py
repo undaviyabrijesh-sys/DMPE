@@ -274,6 +274,18 @@ def book_depth_imbalance(event: dict[str, Any]) -> tuple[float | None, float | N
     return bids, asks, (bids - asks) / (bids + asks)
 
 
+
+
+def infer_trade_aggressor(event: dict[str, Any]) -> str:
+    """Infer taker side from Delta's documented buyer_role code only."""
+    buyer_role = str(event.get("r", "")).lower()
+    if buyer_role == "t":
+        return "BUY taker"
+    if buyer_role == "m":
+        return "SELL taker"
+    return "Unknown"
+
+
 def latest_events() -> tuple[list[dict[str, Any]], Path | None]:
     files = sorted(LIVE_DIR.glob("delta_*.jsonl")) if LIVE_DIR.exists() else []
     if not files:
@@ -467,6 +479,8 @@ def main() -> None:
                 trade_events = [(r, e) for r, e in events if is_kind(e, ("trade",))]
                 book_events = [(r, e) for r, e in events if is_kind(e, ("ob_l2", "orderbook", "order_book"))]
                 mark_events = [(r, e) for r, e in events if is_kind(e, ("mark_price", "markprice"))]
+                system_events = [(r, e) for r, e in events if is_kind(e, ("system_status",))]
+                product_events = [(r, e) for r, e in events if is_kind(e, ("product_updates",))]
                 c1.metric("Trades captured", f"{len(trade_events):,}")
                 c2.metric("Order-book updates", f"{len(book_events):,}")
                 c3.metric("Mark-price updates", f"{len(mark_events):,}")
@@ -476,6 +490,21 @@ def main() -> None:
                 except (TypeError, ValueError):
                     mark_value = None
                 c4.metric("Latest mark price", "—" if mark_value is None else f"USD {mark_value:,.2f}")
+                status_cols = st.columns(2)
+                system_status = system_events[-1][1].get("status") if system_events else None
+                product_event = product_events[-1][1] if product_events else {}
+                product_info = product_event.get("product", {})
+                product_status = product_info.get("trading_status") if isinstance(product_info, dict) else None
+                status_cols[0].metric("Exchange system status", str(system_status or "Not reported"))
+                status_cols[1].metric("BTCUSD trading status", str(product_status or "Not reported"))
+                if system_status and str(system_status).lower() not in {"live", "operational"}:
+                    st.error(f"Exchange system status is {system_status}. Future execution must be locked.")
+                if product_status and str(product_status).lower() != "operational":
+                    st.error(f"BTCUSD product status is {product_status}. Future execution must be locked.")
+                st.caption(
+                    "Status feeds are advisory safety gates. Missing or stale status data must not be treated as operational. "
+                    "This dashboard does not submit orders."
+                )
                 st.caption(
                     f"Source: {newest_file.name if newest_file else 'unknown'} · "
                     f"latest received {records[-1].get('received_at', 'timestamp unavailable')} · "
@@ -499,14 +528,15 @@ def main() -> None:
                         "received_at": r.get("received_at"),
                         "price": e.get("p", e.get("price")),
                         "size": e.get("s", e.get("size")),
-                        "raw_side_code": e.get("r"),
+                        "buyer_role_code": e.get("r"),
+                        "inferred_aggressor": infer_trade_aggressor(e),
                         "event_time": e.get("ts", e.get("t")),
                     } for r, e in trade_events[-30:][::-1]]
                     st.markdown("**Recent trades**")
                     st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
                     st.caption(
-                        "Raw side code shown without interpretation until verified against "
-                        "the exchange specification."
+                        "Delta documents r as buyer_role: t = buyer taker (buy aggressor); "
+                        "m = buyer maker (sell aggressor). Unknown codes remain unclassified."
                     )
                 raw_rows = [{
                     "received_at": r.get("received_at"),
