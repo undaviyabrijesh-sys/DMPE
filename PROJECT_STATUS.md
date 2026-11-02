@@ -157,3 +157,13 @@ No order execution is enabled. Feature/label artifacts and experimental baseline
 - [ ] VPS is not provisioned. Account owner must provision and authorize the host; no credentials are requested or stored here.
 
 The Binance archive can accelerate historical trade-flow research, but it does not replace Delta event capture or historical queue data. The 1m output is an explanatory feature set, not a strategy or trading signal.
+
+
+## Binance historical flow backfill execution
+
+- [x] Confirmed the archive is genuinely downloadable from a GitHub Actions runner, not merely visible in the browser: BTCUSDT USD-M aggTrades for 2024-01 downloaded successfully (522,743,749 bytes) and SHA-256 matched the published checksum.
+- [x] The 2024-01 monthly feature job generated 44,640 minute-close rows, covering 2024-01-01 00:01 UTC through 2024-02-01 00:00 UTC. All 44,640 minutes had at least one aggregate trade. This is a single-month smoke test, not the full 2-year history.
+- [x] Added provenance manifests containing archive URL, checksum URL, SHA-256, byte size and verification result.
+- [x] Added a 24-month matrix backfill for 2024-11 through 2026-10 with six monthly jobs in parallel and a final strict continuity check. Monthly ZIPs are removed after processing in this bulk workflow; checksums and source URLs are retained. The one-month workflow retains a raw archive artifact when needed.
+- [ ] Wait for the 24-month matrix and combine job to complete; verify exactly 24 monthly manifests and 1,051,200 minute-close rows before merging to candle features.
+- [ ] The final 24-month flow artifact is a Binance proxy dataset, not Delta history. Keep it distinct from the Delta live feed in all model and execution reports.
