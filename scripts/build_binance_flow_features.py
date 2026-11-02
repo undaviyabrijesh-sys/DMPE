@@ -38,8 +38,9 @@ def load_aggregate_minutes(archive: Path, chunksize: int = 1_000_000) -> pd.Data
                 if chunk.empty:
                     continue
                 # Binance isBuyerMaker=true => aggressive seller; false => aggressive buyer.
-                is_buyer_maker = buyer_maker_text.isin({"true", "1"}).to_numpy()
-                signed_sign = np.where(is_buyer_maker, -1.0, 1.0)
+                signed_sign = buyer_maker_text.map({
+                    "true": -1.0, "1": -1.0, "false": 1.0, "0": 1.0
+                }).to_numpy(dtype="float64")
                 chunk["signed_qty"] = chunk["quantity"].to_numpy() * signed_sign
                 chunk["notional"] = chunk["price"] * chunk["quantity"]
                 chunk["signed_notional"] = chunk["notional"] * signed_sign
