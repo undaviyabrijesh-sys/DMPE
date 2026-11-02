@@ -384,3 +384,56 @@ def build_live_orderflow_dataset(
         json.dumps(report, indent=2), encoding="utf-8"
     )
     return report
+
+
+def attach_orderflow_features(
+    feature_frame: pd.DataFrame,
+    orderflow_frame: pd.DataFrame,
+) -> tuple[pd.DataFrame, list[str]]:
+    """Exact-time join live event features and add strictly trailing rolling descriptors.
+
+    Both inputs use minute-close UTC timestamps. No as-of carry-forward or
+    forward-fill is allowed: missing capture minutes remain missing.
+    """
+    if "time" not in feature_frame or "time" not in orderflow_frame:
+        raise ValueError("Both feature and order-flow frames must contain time.")
+    base = feature_frame.copy()
+    flow = orderflow_frame.copy()
+    base["time"] = pd.to_datetime(base["time"], utc=True, errors="coerce")
+    flow["time"] = pd.to_datetime(flow["time"], utc=True, errors="coerce")
+    if base["time"].isna().any() or flow["time"].isna().any():
+        raise ValueError("Order-flow join timestamps must be valid.")
+    if base["time"].duplicated().any() or flow["time"].duplicated().any():
+        raise ValueError("Order-flow join requires unique minute-close timestamps.")
+    flow_columns = [col for col in flow.columns if col != "time"]
+    renamed = flow.rename(columns={col: f"of_{col}" for col in flow_columns})
+    merged = base.merge(renamed, on="time", how="left", validate="one_to_one", sort=True)
+    added = [f"of_{col}" for col in flow_columns]
+
+    rolling_sources = {
+        "trade_signed_volume": "of_trade_signed_volume",
+        "trade_volume_imbalance": "of_trade_volume_imbalance",
+        "l2_depth_imbalance_5": "of_l2_depth_imbalance_5_mean",
+        "l2_microprice_mid_bps": "of_l2_microprice_mid_bps_mean",
+        "l2_spread_bps": "of_l2_spread_bps_mean",
+    }
+    for source_name, source_column in rolling_sources.items():
+        if source_column not in merged:
+            continue
+        values = pd.to_numeric(merged[source_column], errors="coerce")
+        for window in (5, 15):
+            column = f"of_{source_name}_mean_{window}m"
+            merged[column] = values.rolling(window=window, min_periods=window).mean()
+            added.append(column)
+
+    for feed_name in ("trade", "l2"):
+        flag = f"of_{feed_name}_feed_observed"
+        if flag in merged:
+            for window in (5, 15):
+                column = f"of_{feed_name}_feed_coverage_{window}m"
+                merged[column] = pd.to_numeric(merged[flag], errors="coerce").rolling(
+                    window=window, min_periods=window
+                ).mean()
+                added.append(column)
+
+    return merged, added
