@@ -322,8 +322,8 @@ def baseline_scorecard(report: dict[str, Any]) -> pd.DataFrame:
         if item.get("status") != "completed":
             continue
         for model_name, metric_key, signal_key in (
-            ("Logistic regression", "logistic_regression_test", "logistic_signals"),
-            ("Histogram gradient boosting", "hist_gradient_boosting_test", "hist_gradient_boosting_signals"),
+            ("Logistic regression", "logistic_regression_test", "logistic_test_confidence_gated_signals"),
+            ("Histogram gradient boosting", "hist_gradient_boosting_test", "hist_gradient_boosting_test_confidence_gated_signals"),
         ):
             metrics = item.get(metric_key) or {}
             signals = item.get(signal_key) or {}
