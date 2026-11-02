@@ -13,7 +13,7 @@ def test_binance_buyer_maker_sign_and_minute_close(tmp_path):
     archive = tmp_path / "BTCUSDT-aggTrades-2024-01.zip"
     rows = [
         "1,50000,0.01,1,1,1704067200123,false",
-        "2,50010,0.02,2,2,1704067210123,true",
+        "2,50010,0.02,2,2,1704067260123,true",
     ]
     with zipfile.ZipFile(archive, "w") as zipped:
         zipped.writestr("BTCUSDT-aggTrades-2024-01.csv", "\n".join(rows) + "\n")
