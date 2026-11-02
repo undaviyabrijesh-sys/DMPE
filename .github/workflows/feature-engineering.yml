@@ -5,9 +5,11 @@ on:
     paths:
       - ".github/workflows/feature-engineering.yml"
       - "src/dmpe/features.py"
+      - "src/dmpe/labels.py"
       - "scripts/profile_history.py"
       - "scripts/build_feature_dataset.py"
       - "tests/test_features.py"
+      - "tests/test_labels.py"
   workflow_dispatch:
     inputs:
       source_run_id:
