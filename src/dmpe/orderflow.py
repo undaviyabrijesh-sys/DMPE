@@ -145,6 +145,57 @@ def parse_book_event(event: dict[str, Any]) -> dict[str, Any] | None:
     return result
 
 
+
+def parse_funding_event(record: dict[str, Any], event: dict[str, Any]) -> dict[str, Any] | None:
+    """Parse Delta's funding_rate snapshot with its explicit next realization timestamp."""
+    if str(event.get("type", "")).lower() != "funding_rate":
+        return None
+    observed_at = event_timestamp(record, event)
+    next_realization = to_utc_timestamp(event.get("nfr"))
+    try:
+        rate = float(event["fr"])
+        interval_seconds = int(event["fi"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if (
+        observed_at is None or pd.isna(observed_at)
+        or next_realization is None or pd.isna(next_realization)
+        or not np.isfinite(rate) or interval_seconds <= 0
+    ):
+        return None
+    if next_realization <= observed_at:
+        return None
+    return {
+        "observed_at": observed_at,
+        "next_funding_realization": next_realization,
+        "funding_rate": rate,
+        "funding_interval_seconds": interval_seconds,
+        "symbol": event.get("sy") or record.get("symbol"),
+    }
+
+
+def extract_funding_observations(records: Iterable[dict[str, Any]]) -> pd.DataFrame:
+    """Return timestamped funding snapshots; never infer settlement from hourly OHLC."""
+    rows = []
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        event = unwrap_record(record)
+        parsed = parse_funding_event(record, event)
+        if parsed is not None:
+            rows.append(parsed)
+    if not rows:
+        return pd.DataFrame(columns=[
+            "observed_at", "next_funding_realization", "funding_rate",
+            "funding_interval_seconds", "symbol",
+        ])
+    return (
+        pd.DataFrame(rows)
+        .drop_duplicates(["observed_at", "next_funding_realization", "symbol"])
+        .sort_values(["next_funding_realization", "observed_at"])
+        .reset_index(drop=True)
+    )
+
 def _aggregate_trade_minute(events: list[dict[str, Any]]) -> dict[str, Any]:
     events = sorted(events, key=lambda item: item["_time"])
     sizes = np.array([item["size"] for item in events], dtype="float64")
@@ -281,7 +332,8 @@ def build_live_orderflow_dataset(
         raise FileNotFoundError(f"No Delta JSONL recorder files found in {input_path}")
     records, ingest = read_jsonl_files(files)
     features = aggregate_event_records(records)
-    if features.empty:
+    funding_observations = extract_funding_observations(records)
+    if features.empty and funding_observations.empty:
         raise ValueError("No usable trades or L2 book snapshots were found in the JSONL files.")
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
@@ -289,14 +341,22 @@ def build_live_orderflow_dataset(
     csv_path = output_path / "dmpe_BTCUSD_live_orderflow_1m.csv"
     features.to_parquet(parquet_path, index=False, compression="zstd")
     features.to_csv(csv_path, index=False)
+    funding_parquet = output_path / "dmpe_BTCUSD_funding_observations.parquet"
+    funding_csv = output_path / "dmpe_BTCUSD_funding_observations.csv"
+    if not funding_observations.empty:
+        funding_observations.to_parquet(funding_parquet, index=False, compression="zstd")
+        funding_observations.to_csv(funding_csv, index=False)
     report = {
         "built_at_utc": datetime.now(timezone.utc).isoformat(),
         "input": ingest,
         "first_close_time_utc": features["time"].min().isoformat(),
         "last_close_time_utc": features["time"].max().isoformat(),
         "minutes": int(len(features)),
-        "minutes_with_trade_events": int(features["trade_feed_observed"].sum()),
-        "minutes_with_l2_events": int(features["l2_feed_observed"].sum()),
+        "minutes_with_trade_events": int(features["trade_feed_observed"].sum()) if "trade_feed_observed" in features else 0,
+        "minutes_with_l2_events": int(features["l2_feed_observed"].sum()) if "l2_feed_observed" in features else 0,
+        "funding_observations": int(len(funding_observations)),
+        "funding_observations_parquet": str(funding_parquet) if not funding_observations.empty else None,
+        "funding_observations_csv": str(funding_csv) if not funding_observations.empty else None,
         "feature_columns": [col for col in features.columns if col not in {"time"}],
         "semantics": {
             "trade_side": (
@@ -308,6 +368,11 @@ def build_live_orderflow_dataset(
             "missingness": (
                 "No forward fill. Minutes without a trade or L2 event retain NaN measurements "
                 "and explicit feed_observed flags."
+            ),
+            "funding": (
+                "Funding snapshots preserve observed_at, published funding_rate and explicit "
+                "next_funding_realization. They are not yet charged by the execution simulator; "
+                "the signed cashflow convention and realized payment must be reconciled first."
             ),
             "scope": "Live capture only; does not reconstruct historical tick or order-book history.",
         },
