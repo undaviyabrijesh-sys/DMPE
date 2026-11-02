@@ -29,7 +29,9 @@
 - [x] Add mark-price basis/returns and delayed hourly funding/OI descriptors
 - [x] Add forward-return and future-excursion targets for 15m, 1h and 3h
 - [x] Add tests for timestamp gaps, future-data leakage and delayed hourly joins
-- [ ] Review final feature artifact's null rates, funding semantics and market-data gaps
+- [x] Review feature null rates and preserve negative/zero funding-rate observations correctly
+- [x] Store model inputs and forward targets as float32 to reduce artifact size
+- [ ] Review final feature artifact's target distributions and barrier-label class balance
 - [ ] Add target barrier labels and walk-forward model evaluation
 
 ## Historical coverage snapshot
