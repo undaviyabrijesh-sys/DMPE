@@ -84,7 +84,7 @@ def score_variant(
     horizon_name: str,
     horizon_minutes: int,
     multiplier: float,
-) -> dict[str, Any]:
+) -> tuple[dict[str, Any], list[pd.DataFrame]]:
     times = pd.to_datetime(sample["time"], utc=True)
     x = sample[feature_columns].apply(pd.to_numeric, errors="coerce").astype("float32")
     fold_results = []
@@ -110,8 +110,10 @@ def score_variant(
             "validation_rows": int(len(val_idx)),
             "test_rows": int(len(test_idx)),
         }
-        if min(len(train_idx), len(val_idx), len(test_idx)) < min(
-            MIN_TRAIN_ROWS, MIN_VALIDATION_ROWS, MIN_TEST_ROWS
+        if (
+            len(train_idx) < MIN_TRAIN_ROWS
+            or len(val_idx) < MIN_VALIDATION_ROWS
+            or len(test_idx) < MIN_TEST_ROWS
         ):
             fold_row["status"] = "skipped_insufficient_partition"
             fold_results.append(fold_row)
@@ -214,7 +216,7 @@ def score_variant(
     }
     if not completed or combined_classes is None:
         variant["status"] = "no_completed_folds"
-        return variant
+        return variant, signal_frames
 
     overall_y = np.concatenate(combined_y)
     overall_pred = np.concatenate(combined_predictions)
@@ -230,7 +232,7 @@ def score_variant(
                 np.concatenate(combined_signals),
             ),
             "folds_with_selected_threshold": sum(
-                row.get("test_confidence_gated_signals", {}).get("signals", 0) > 0
+                row.get("threshold_selection_on_validation", {}).get("selected_threshold") is not None
                 for row in completed
             ),
         }
