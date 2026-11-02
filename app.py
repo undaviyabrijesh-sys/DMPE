@@ -34,6 +34,10 @@ WALK_FORWARD_REPORT_PATHS = [
     Path(os.getenv("DMPE_STAGE3_DIR", ROOT / "stage3_output")) / "walk_forward_report.json",
     ROOT / "artifacts" / "stage3_output" / "walk_forward_report.json",
 ]
+ORDERFLOW_FEATURE_PATH = Path(os.getenv(
+    "DMPE_ORDERFLOW_FILE",
+    ROOT / "orderflow_output" / "processed" / "dmpe_BTCUSD_live_orderflow_1m.parquet",
+))
 
 TF_SECONDS = {
     "1m": 60, "3m": 180, "5m": 300, "15m": 900, "30m": 1800,
@@ -399,6 +403,21 @@ def walk_forward_scorecard(report: dict[str, Any]) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+
+
+@st.cache_data(ttl=30, show_spinner=False)
+def read_orderflow_tail(path_str: str, modified_ns: int) -> pd.DataFrame:
+    del modified_ns
+    columns = [
+        "time", "trade_count", "trade_buy_taker_volume", "trade_sell_taker_volume",
+        "trade_volume_imbalance", "trade_total_volume", "l2_snapshot_count",
+        "l2_spread_bps_last", "l2_depth_imbalance_5_last",
+        "l2_microprice_mid_bps_last",
+    ]
+    available = pd.read_parquet(path_str, columns=columns)
+    return available.tail(60).reset_index(drop=True)
+
+
 def main() -> None:
     st.title("DMPE Quant Desk")
     st.caption("Dynamic Market Prediction Engine · BTCUSD perpetual · research workspace")
@@ -575,6 +594,43 @@ def main() -> None:
                         "Delta documents r as buyer_role: t = buyer taker (buy aggressor); "
                         "m = buyer maker (sell aggressor). Unknown codes remain unclassified."
                     )
+
+                st.markdown("**Aggregated live order-flow features**")
+                if ORDERFLOW_FEATURE_PATH.exists():
+                    try:
+                        flow = read_orderflow_tail(
+                            str(ORDERFLOW_FEATURE_PATH), ORDERFLOW_FEATURE_PATH.stat().st_mtime_ns
+                        )
+                        if not flow.empty:
+                            latest = flow.iloc[-1]
+                            fcols = st.columns(5)
+                            fcols[0].metric("Aggressor volume imbalance",
+                                "—" if pd.isna(latest["trade_volume_imbalance"]) else f"{latest['trade_volume_imbalance']:+.1%}")
+                            fcols[1].metric("Buy-taker volume",
+                                "—" if pd.isna(latest["trade_buy_taker_volume"]) else f"{latest['trade_buy_taker_volume']:,.2f}")
+                            fcols[2].metric("Sell-taker volume",
+                                "—" if pd.isna(latest["trade_sell_taker_volume"]) else f"{latest['trade_sell_taker_volume']:,.2f}")
+                            fcols[3].metric("Top-5 depth imbalance",
+                                "—" if pd.isna(latest["l2_depth_imbalance_5_last"]) else f"{latest['l2_depth_imbalance_5_last']:+.1%}")
+                            fcols[4].metric("Spread (bps)",
+                                "—" if pd.isna(latest["l2_spread_bps_last"]) else f"{latest['l2_spread_bps_last']:.2f}")
+                            st.caption(
+                                f"Aggregated minute close: {latest['time']} · "
+                                f"trade prints: {int(latest['trade_count']) if pd.notna(latest['trade_count']) else 0} · "
+                                f"L2 snapshots: {int(latest['l2_snapshot_count']) if pd.notna(latest['l2_snapshot_count']) else 0}. "
+                                "These are observed microstructure descriptors, not validated trade signals."
+                            )
+                            st.dataframe(flow.tail(10).sort_values("time", ascending=False),
+                                         use_container_width=True, hide_index=True)
+                    except Exception as exc:
+                        st.error(f"Could not read aggregated order-flow file: {exc}")
+                else:
+                    st.info(
+                        "No aggregated order-flow feature file found. Run "
+                        "scripts/build_live_orderflow_dataset.py or the DMPE live order-flow "
+                        "feature workflow after downloading a capture artifact."
+                    )
+
                 raw_rows = [{
                     "received_at": r.get("received_at"),
                     "kind": event_kind(e),
