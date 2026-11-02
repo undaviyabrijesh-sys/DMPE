@@ -9,7 +9,7 @@
 
 Candle-only symmetric first-touch classification has not survived the first cost-aware replay. The next hypothesis is that separate long and short event models can identify fewer but higher-payoff events when the target is three times the stop distance, and that verified trade/order-book microstructure adds information beyond candles.
 
-A 3:1 gross payoff does **not** guarantee profitability. The model must estimate directional target-first probability accurately enough to exceed the realized, side-specific cost-adjusted break-even probability, while accounting for unfilled passive entries.
+A 3:1 gross payoff does **not** guarantee profitability. The model must estimate directional target-first probability accurately enough to exceed the realized, side-specific cost-adjusted break-even probability, while accounting for unfilled passive entries. The Stage 1 asymmetric labels currently measure a signal-close reference path; they are diagnostic labels, not yet maker-fill-conditioned labels. They must not be used to claim maker-entry profitability until the event-level fill/queue model and fill-conditioned label semantics are implemented.
 
 ## Frozen primary variants
 
@@ -32,8 +32,8 @@ A 3:1 gross payoff does **not** guarantee profitability. The model must estimate
 
 ## Cost and fill policy
 
-- Current public BTCUSD contract page lists maker 0.02%, taker 0.05%, and 8-hour funding interval. 18% GST applies to trading fees. These are the reference schedule, not a guarantee of the user's account-specific rate.
-- Model passive entry as a **limit order with an explicit no-fill outcome**, not as an automatic maker fill. A touch of the limit is insufficient evidence of queue priority. Require a conservative trade-through/queue buffer and measure fill rate, time-to-fill, adverse selection and missed moves using collected L2/trade data.
+- Current public BTCUSD contract page lists maker 0.02%, taker 0.05%, and 8-hour funding interval. 18% GST applies to trading fees: 2.36 bps maker and 5.9 bps taker per side before any account-specific discounts. An idealized 3R trade with maker entry + maker target + taker stop has an approximate cost-adjusted break-even target probability around 27–34% when horizon RV is 1.0%–0.2%, respectively, assuming every maker order fills and the target maker exit executes. This is only a theoretical hurdle; queue priority, missed fills, spread, funding and adverse selection increase it.
+- Model passive entry as a **limit order with an explicit no-fill outcome**, not as an automatic maker fill. A touch of the limit is insufficient evidence of queue priority. Require a conservative trade-through/queue buffer and measure fill rate, time-to-fill, adverse selection and missed moves using collected L2/trade data. The model labels must be conditioned on actual/credible passive fills, or the selection bias from fill-conditioned paths must be explicitly modelled.
 - If passive entry fills, target exit may be maker only if the limit order is actually executable; stop exit is taker. Any unfilled or ambiguous order is not counted as a completed trade. Include cancellation/expiry and price movement while waiting.
 - Until the fill model is calibrated from live event data, report a pessimistic scenario range and keep the strategy in research mode.
 - Apply funding only at verified next-funding-realization timestamps using the contemporaneous published funding rate and signed position notional. Do not infer settlement from a generic hourly candle close.
