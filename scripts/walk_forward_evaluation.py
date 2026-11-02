@@ -198,6 +198,9 @@ def score_variant(
                 "signals": 0,
                 "coverage": 0.0,
             }
+            # Keep inactive folds in the denominator of combined coverage.
+            combined_signals.append(np.zeros(len(y_test), dtype="int8"))
+            combined_signal_y.append(y_test)
 
         combined_y.append(y_test)
         combined_predictions.append(test_pred)
