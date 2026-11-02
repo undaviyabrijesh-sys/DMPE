@@ -1,12 +1,18 @@
 name: DMPE baseline model evaluation
 
 on:
+  push:
+    paths:
+      - ".github/workflows/baseline-evaluation.yml"
+      - "scripts/evaluate_baselines.py"
+      - "tests/test_evaluate_baselines.py"
+      - "requirements.txt"
   workflow_dispatch:
     inputs:
       feature_run_id:
         description: "GitHub Actions run ID containing the Stage 1 feature artifact"
         required: true
-        default: "41489429001"
+        default: "41490148033"
         type: string
 
 permissions:
@@ -35,7 +41,7 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           repository: ${{ github.repository }}
-          run-id: ${{ inputs.feature_run_id }}
+          run-id: ${{ github.event.inputs.feature_run_id || '41490148033' }}
           name: dmpe-stage1-feature-engineering
           path: stage1_input
 
