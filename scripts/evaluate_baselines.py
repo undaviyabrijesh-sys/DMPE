@@ -14,6 +14,7 @@ import joblib
 import numpy as np
 import pandas as pd
 from sklearn.dummy import DummyClassifier
+from sklearn.ensemble import HistGradientBoostingClassifier
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
@@ -39,10 +40,12 @@ def _predict_direction(probabilities: np.ndarray, classes: np.ndarray, threshold
     class_to_col = {-1: 0, 0: 1, 1: 2}
     for idx, class_value in enumerate(classes):
         aligned[:, class_to_col[int(class_value)]] = probabilities[:, idx]
-    p_down, _, p_up = aligned.T
+    p_down, p_flat, p_up = aligned.T
     prediction = np.zeros(len(aligned), dtype="int8")
-    up = (p_up >= threshold) & (p_up > p_down)
-    down = (p_down >= threshold) & (p_down > p_up)
+    # A directional call must be the model's most likely class, not merely
+    # higher than the opposite direction while FLAT remains more probable.
+    up = (p_up >= threshold) & (p_up > p_down) & (p_up > p_flat)
+    down = (p_down >= threshold) & (p_down > p_up) & (p_down > p_flat)
     prediction[up] = 1
     prediction[down] = -1
     return prediction
@@ -262,17 +265,17 @@ def evaluate_one(
     result["logistic_regression_test"] = _multiclass_metrics(
         y_test, test_pred, test_prob, model.classes_
     )
-    result["validation_threshold_selection"] = threshold_selection
+    result["logistic_validation_threshold_selection"] = threshold_selection
 
-    chosen = threshold_selection["selected_threshold"]
-    if chosen is not None:
-        test_signals = _predict_direction(test_prob, model.classes_, chosen)
-        result["test_confidence_gated_signals"] = {
-            "threshold_selected_on_validation": chosen,
-            **_signal_metrics(y_test, test_signals),
+    logistic_threshold = threshold_selection["selected_threshold"]
+    if logistic_threshold is not None:
+        logistic_signals = _predict_direction(test_prob, model.classes_, logistic_threshold)
+        result["logistic_test_confidence_gated_signals"] = {
+            "threshold_selected_on_validation": logistic_threshold,
+            **_signal_metrics(y_test, logistic_signals),
         }
     else:
-        result["test_confidence_gated_signals"] = {
+        result["logistic_test_confidence_gated_signals"] = {
             "threshold_selected_on_validation": None,
             "status": "inactive_no_validation_threshold_met_minimum_signal_count",
             "signals": 0,
@@ -294,7 +297,67 @@ def evaluate_one(
         "test_start_utc": split_info["test_start"],
         "validated_for_live_trading": False,
     }, model_path, compress=3)
-    result["experimental_model_file"] = str(model_path)
+    result["experimental_logistic_model_file"] = str(model_path)
+
+    # Nonlinear benchmark with conservative tree depth/leaf size. This is also
+    # fitted on train only; validation selects only the confidence gate.
+    tree_model = Pipeline(steps=[
+        ("imputer", SimpleImputer(strategy="median")),
+        ("classifier", HistGradientBoostingClassifier(
+            learning_rate=0.05,
+            max_iter=160,
+            max_leaf_nodes=15,
+            min_samples_leaf=60,
+            l2_regularization=5.0,
+            early_stopping=False,
+            random_state=42,
+        )),
+    ])
+    tree_model.fit(x_train, y_train)
+    tree_val_prob = tree_model.predict_proba(x_val)
+    tree_val_pred = tree_model.predict(x_val)
+    tree_threshold_selection = choose_confidence_threshold(
+        y_val, tree_val_prob, tree_model.classes_
+    )
+    tree_test_prob = tree_model.predict_proba(x_test)
+    tree_test_pred = tree_model.predict(x_test)
+    result["hist_gradient_boosting_validation"] = _multiclass_metrics(
+        y_val, tree_val_pred, tree_val_prob, tree_model.classes_
+    )
+    result["hist_gradient_boosting_test"] = _multiclass_metrics(
+        y_test, tree_test_pred, tree_test_prob, tree_model.classes_
+    )
+    result["hist_gradient_boosting_validation_threshold_selection"] = tree_threshold_selection
+    tree_threshold = tree_threshold_selection["selected_threshold"]
+    if tree_threshold is not None:
+        tree_signals = _predict_direction(tree_test_prob, tree_model.classes_, tree_threshold)
+        result["hist_gradient_boosting_test_confidence_gated_signals"] = {
+            "threshold_selected_on_validation": tree_threshold,
+            **_signal_metrics(y_test, tree_signals),
+        }
+    else:
+        result["hist_gradient_boosting_test_confidence_gated_signals"] = {
+            "threshold_selected_on_validation": None,
+            "status": "inactive_no_validation_threshold_met_minimum_signal_count",
+            "signals": 0,
+            "coverage": 0.0,
+            "correct_directional_share_of_signals": None,
+        }
+
+    tree_path = model_dir / f"dmpe_histgb_{horizon_name}_{tag}rv.joblib"
+    joblib.dump({
+        "pipeline": tree_model,
+        "feature_columns": usable_features,
+        "classes": tree_model.classes_.tolist(),
+        "horizon": horizon_name,
+        "barrier_multiple": multiplier,
+        "label_column": label_column,
+        "train_end_utc": split_info["train_end"],
+        "validation_start_utc": split_info["validation_start"],
+        "test_start_utc": split_info["test_start"],
+        "validated_for_live_trading": False,
+    }, tree_path, compress=3)
+    result["experimental_hist_gradient_boosting_model_file"] = str(tree_path)
     return result
 
 
@@ -361,8 +424,9 @@ def main() -> None:
             "Purge and embargo one full target horizon at both split boundaries.",
             "Fit imputation, scaling and model only on the train partition.",
             "Select signal confidence thresholds on validation only.",
-            "Evaluate the final frozen model on the untouched test partition.",
-            "Ambiguous same-minute touch and invalid/incomplete states are excluded.",
+            "A directional output must be the highest-probability class and clear the threshold.",
+            "Evaluate the final frozen models on the untouched test partition.",
+            "Ambiguous same-minute touch and invalid/incomplete states are excluded."
         ],
         "results": evaluations,
     }
@@ -380,8 +444,11 @@ def main() -> None:
             "multiplier": row["barrier_multiple"],
             "status": row["status"],
             "samples": row["samples_before_split"],
-            "test": row.get("logistic_regression_test"),
-            "signals": row.get("test_confidence_gated_signals"),
+            "prior_baseline_test": row.get("majority_prior_baseline"),
+            "logistic_test": row.get("logistic_regression_test"),
+            "logistic_signals": row.get("logistic_test_confidence_gated_signals"),
+            "hist_gradient_boosting_test": row.get("hist_gradient_boosting_test"),
+            "hist_gradient_boosting_signals": row.get("hist_gradient_boosting_test_confidence_gated_signals"),
         } for row in evaluations],
     }, indent=2, allow_nan=False))
 
