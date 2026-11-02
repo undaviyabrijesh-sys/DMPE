@@ -69,7 +69,7 @@ def test_feature_columns_do_not_depend_on_future_prices():
 def test_hourly_funding_is_delayed_before_join():
     price = make_price_frame(240)
     hour_times = pd.date_range("2024-01-01T00:00:00Z", periods=4, freq="1h")
-    rates = [0.0001, 0.0002, 0.0003, 0.0004]
+    rates = [-0.0001, 0.0, 0.0003, 0.0004]
     funding = pd.DataFrame({
         "time": hour_times, "open": rates, "high": rates,
         "low": rates, "close": rates, "volume": 0.0,
@@ -82,3 +82,5 @@ def test_hourly_funding_is_delayed_before_join():
                               "funding_funding_rate"].iloc[0]
     assert pd.isna(before_available)
     assert at_available == rates[0]
+    quality = profile_series("funding_rate_1h", funding, 3600)
+    assert quality["invalid_ohlc_rows"] == 0
