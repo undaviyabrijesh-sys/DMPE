@@ -1,0 +1,130 @@
+name: DMPE Binance 24-month aggTrades backfill
+
+on:
+  push:
+    paths:
+      - ".github/workflows/binance-flow-backfill-24m.yml"
+      - "scripts/download_binance_aggtrades.py"
+      - "scripts/build_binance_flow_features.py"
+      - "scripts/combine_binance_flow_months.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  monthly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        month:
+          - "2024-11"
+          - "2024-12"
+          - "2025-01"
+          - "2025-02"
+          - "2025-03"
+          - "2025-04"
+          - "2025-05"
+          - "2025-06"
+          - "2025-07"
+          - "2025-08"
+          - "2025-09"
+          - "2025-10"
+          - "2025-11"
+          - "2025-12"
+          - "2026-01"
+          - "2026-02"
+          - "2026-03"
+          - "2026-04"
+          - "2026-05"
+          - "2026-06"
+          - "2026-07"
+          - "2026-08"
+          - "2026-09"
+          - "2026-10"
+    steps:
+      - name: Check out DMPE
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install data dependencies
+        run: pip install "requests>=2.32,<3" "pandas>=2.2,<3" "pyarrow>=17,<25"
+
+      - name: Parse month
+        run: |
+          echo "ARCHIVE_YEAR=${{ matrix.month }} " | sed 's/-.*//' >> "$GITHUB_ENV"
+          echo "ARCHIVE_MONTH=${{ matrix.month }}" | sed 's/.*-//' >> "$GITHUB_ENV"
+
+      - name: Download and checksum source archive
+        run: |
+          python scripts/download_binance_aggtrades.py \
+            --symbol BTCUSDT \
+            --year "$ARCHIVE_YEAR" \
+            --month "$ARCHIVE_MONTH" \
+            --output-dir binance_input
+
+      - name: Build minute flow features
+        run: |
+          MONTH_PADDED=$(printf '%02d' "$ARCHIVE_MONTH")
+          python scripts/build_binance_flow_features.py \
+            --archive "binance_input/BTCUSDT-aggTrades-$ARCHIVE_YEAR-$MONTH_PADDED.zip" \
+            --year "$ARCHIVE_YEAR" \
+            --month "$ARCHIVE_MONTH" \
+            --output-dir binance_output
+          rm "binance_input/BTCUSDT-aggTrades-$ARCHIVE_YEAR-$MONTH_PADDED.zip"
+
+      - name: Upload monthly flow and source provenance
+        uses: actions/upload-artifact@v4
+        with:
+          name: dmpe-binance-flow-${{ matrix.month }}
+          path: |
+            binance_input/
+            binance_output/
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+
+  combine:
+    needs: monthly
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out DMPE
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install data dependencies
+        run: pip install "pandas>=2.2,<3" "pyarrow>=17,<25"
+
+      - name: Download all monthly flow artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: dmpe-binance-flow-*
+          path: monthly
+          merge-multiple: true
+
+      - name: Combine and validate two-year minute grid
+        run: |
+          python scripts/combine_binance_flow_months.py \
+            --input-dir monthly \
+            --output-dir combined
+
+      - name: Upload combined 24-month feature dataset
+        uses: actions/upload-artifact@v4
+        with:
+          name: dmpe-binance-btcusdt-flow-2024-11-to-2026-10
+          path: combined/
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 0
