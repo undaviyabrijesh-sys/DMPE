@@ -20,7 +20,7 @@ def make_barrier_frame(periods=24):
     return pd.DataFrame({
         "time": times, "open": close, "high": high, "low": low,
         "close": close, "volume": 10.0,
-        "atr_14m_pct": 1.0,
+        "realized_vol_15m_pct": 1.0,
     })
 
 
@@ -28,9 +28,9 @@ def test_first_touch_barrier_labeling_and_ambiguous_minute():
     output, labels, diagnostics, report = add_barrier_labels(
         make_barrier_frame(), horizons={"15m": 4}, multipliers=(1.0,)
     )
-    label = "barrier_label_15m_1atr"
-    state = "barrier_state_15m_1atr"
-    bars = "barrier_bars_15m_1atr"
+    label = "barrier_label_15m_1rv"
+    state = "barrier_state_15m_1rv"
+    bars = "barrier_bars_15m_1rv"
     assert label in labels
     assert state in diagnostics and bars in diagnostics
     assert output.loc[0, label] == 1
