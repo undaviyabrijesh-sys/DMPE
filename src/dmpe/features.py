@@ -93,8 +93,11 @@ def profile_series(name: str, frame: pd.DataFrame, timeframe_seconds: int) -> di
             (work["low"] > work["high"])
             | (work["open"] < work["low"]) | (work["open"] > work["high"])
             | (work["close"] < work["low"]) | (work["close"] > work["high"])
-            | (work[["open", "high", "low", "close"]] <= 0).any(axis=1)
         )
+        # Market prices and open interest must be positive; funding rates may
+        # legitimately be negative or zero.
+        if name in {"traded_price_1m", "mark_price_1m", "open_interest_1h"}:
+            bad = bad | (work[["open", "high", "low", "close"]] <= 0).any(axis=1)
         invalid_ohlc = int(bad.sum())
 
     return DatasetProfile(
