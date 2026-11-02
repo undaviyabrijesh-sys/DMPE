@@ -52,4 +52,4 @@
 6. Include fees, spread, slippage, funding, latency, turnover, drawdown and calibration.
 7. Register only validated models in the desk; add risk controls and paper trading before any live execution decision.
 
-No order execution is enabled. The current feature/label artifact is research data, not a trading signal.
+No order execution is enabled. Feature/label artifacts and experimental baseline models are research data, not trading signals.
