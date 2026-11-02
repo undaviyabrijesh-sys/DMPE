@@ -65,6 +65,15 @@
 - Open interest: 24,940 hourly rows; continuous hourly timestamps over its actual coverage window.
 - Historical trades and historical order-book depth are not available from these candle files.
 
+## Live microstructure pipeline smoke test (run 41494766217)
+
+- [x] Captured 3,941 raw WebSocket records including trade, L2 and operational status channels.
+- [x] Automatically produced a separate derived order-flow artifact.
+- Six minute-close rows were generated: trade events occurred in all 6 minutes and L2 snapshots in 5 minutes.
+- Parsed 2,566 trade prints and 597 L2 snapshots; all observed trade rows had a recognized buyer-role code in this short capture.
+- Verified the expected market fields: aggressive buy/sell volume, volume imbalance, spread, top-5 depth imbalance and microprice pressure.
+- This is a schema/collector smoke test only. Six minutes is far too little history to train or validate an order-flow model. The next data task is a materially longer continuous capture and feed-gap analysis.
+
 ## First baseline findings (exploratory single holdout)
 
 - The regularized histogram-gradient-boosting classifier improved balanced accuracy versus the prior-class benchmark in most variants, but overall balanced accuracy remained low (roughly 0.34–0.44 across the 9 variants).
