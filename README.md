@@ -67,13 +67,14 @@ The target columns are for research evaluation only. Never include `target_*` co
 
 ## Stage 2 — Chronological baseline evaluation
 
-Run **Actions → DMPE baseline model evaluation** after a successful Stage 1 feature-engineering workflow. The default source feature run ID is `41490148033`; enter a newer feature-workflow run ID when using a newer artifact. The job compares a prior-class baseline with an experimental logistic-regression classifier for each 15m/1h/3h horizon and each 0.75x/1.0x/1.5x horizon-aligned volatility barrier.
+Run **Actions → DMPE baseline model evaluation** after a successful Stage 1 feature-engineering workflow. The default source feature run ID is `41490148033`; enter a newer feature-workflow run ID when using a newer artifact. The job compares a prior-class baseline, an experimental logistic-regression classifier and a regularized histogram-gradient-boosting classifier for each 15m/1h/3h horizon and each 0.75x/1.0x/1.5x horizon-aligned volatility barrier.
 
 Evaluation safeguards:
 - One UTC-aligned sample per target horizon, so adjacent labels in the sample do not overlap.
 - Chronological 70/15/15 train/validation/test periods, with one full target-horizon embargo on each side of the split boundaries.
 - Imputation, scaling and model fitting use the training period only.
 - Confidence threshold is selected on validation only; final metrics are reported on the untouched test period.
+- A long/short call must be the highest-probability class (it must beat FLAT as well as the opposite direction) and clear the validation-selected threshold.
 - Ambiguous same-minute barriers and incomplete windows are excluded from directional fitting.
 - Future target columns are never model inputs.
 
