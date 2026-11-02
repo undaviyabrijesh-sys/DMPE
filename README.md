@@ -52,7 +52,7 @@ The live pane reads the JSONL files produced by that recorder. The Streamlit app
 
 ## Stage 1 — Historical audit and feature engineering
 
-The first reproducible feature workflow reads the historical backfill artifact, profiles each dataset's cadence and largest gaps, then creates a 1-minute research table. It builds 40 candidate point-in-time descriptors, 9 continuous forward-return/excursion targets, and 9 first-touch realized-volatility barrier labels across 15m, 1h and 3h horizons. Each horizon uses a matching trailing realized-volatility scale: 15m, 60m and 180m respectively. The barrier grid tests symmetric distances of 0.75, 1.0 and 1.5 times that horizon-aligned scale; these are research variants, not selected trading parameters.
+The first reproducible feature workflow reads the historical backfill artifact, profiles each dataset's cadence and largest gaps, then creates a 1-minute research table. It builds 40 candidate point-in-time descriptors, 9 continuous forward-return/excursion targets, 9 symmetric first-touch labels across 15m, 1h and 3h, and separate asymmetric long/short event labels for the preregistered 15m and 1h experiments (1x RV stop / 3x RV target). Each horizon uses a matching trailing realized-volatility scale: 15m, 60m and 180m respectively. The barrier grid tests symmetric distances of 0.75, 1.0 and 1.5 times that horizon-aligned scale; these are research variants, not selected trading parameters.
 
 Candidate descriptors include lagged returns, realized volatility, ATR, normalized moving-average distance, volume surprise, candle shape, UTC time seasonality, mark-price basis/returns, hourly funding-rate changes and hourly open-interest changes. Exchange candle timestamps denote minute OPEN, but each processed feature row is timestamped at the completed minute CLOSE (source timestamp + 1 minute). The model may only act after that close; target windows begin with the following minute. This avoids using a completed candle's high/low/close at the candle open. Funding/OI observations are delayed by one full hour plus one minute before joining. Negative funding is preserved as valid data. The minute grid makes missing candles explicit; price is not forward-filled, rolling features require complete lookback windows, and forward labels are null when the future window crosses missing data.
 
@@ -90,7 +90,7 @@ After collecting raw JSONL data, build minute-level trade and L2 descriptors loc
 ```bash
 python scripts/build_live_orderflow_dataset.py --input-dir data/raw/live --output-dir data/processed
 ```
-This produces `dmpe_BTCUSD_live_orderflow_1m.parquet`, CSV and a report. It summarizes aggressive buy/sell contract volume, signed volume imbalance, trade VWAP/range/arrival pace, top-1/5/10/15 order-book depth imbalance, spread and microprice pressure. Unknown trade-role codes remain unclassified and missing event minutes are not filled.
+This produces `dmpe_BTCUSD_live_orderflow_1m.parquet`, CSV and a report. It also extracts `funding_rate` snapshots into separate `dmpe_BTCUSD_funding_observations.parquet/csv` files, retaining the observed rate and Delta's explicit `next_funding_realization` timestamp. Those observations are not charged in the simulator until the settlement cashflow convention is reconciled. It summarizes aggressive buy/sell contract volume, signed volume imbalance, trade VWAP/range/arrival pace, top-1/5/10/15 order-book depth imbalance, spread and microprice pressure. Unknown trade-role codes remain unclassified and missing event minutes are not filled.
 
 Delta's public trade event documents `r` as `buyer_role`: `t` means the buyer was taker and `m` means the buyer was maker. DMPE therefore maps `t` to buyer-taker (aggressive buy) and `m` to seller-taker (aggressive sell); other values are not guessed. The event data are microsecond-timestamped. The L2 public channel provides top-15 bid/ask price-size levels. See the [official Delta WebSocket public-channel documentation](https://docs.delta.exchange/#trades).
 
@@ -155,3 +155,12 @@ PYTHONPATH=src pytest -q
 
 ## Limitations
 Historical trades and historical order-book depth are not returned by the candle endpoint. The WebSocket recorder starts collecting those events only when it is running. Historical funding and OI symbols may have shorter coverage than price candles. The first backfill report will show which series were actually available. No model training or live trading is enabled.
+
+
+## Always-on live recorder VPS
+
+GitHub Actions is intended for finite captures, not a persistent WebSocket process. A hardened systemd unit and installation guide are included in `deploy/vps/`:
+- `deploy/vps/dmpe-live-recorder.service`
+- `deploy/vps/README.md`
+
+The service runs the public BTCUSD recorder under a non-root account, restarts after disconnects, and writes daily JSONL files to persistent storage. It requires no API keys and cannot place orders. Provisioning the VPS and configuring durable off-host backups still require the account owner.
