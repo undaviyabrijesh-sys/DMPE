@@ -334,13 +334,14 @@ def build_live_orderflow_dataset(
     features = aggregate_event_records(records)
     funding_observations = extract_funding_observations(records)
     if features.empty and funding_observations.empty:
-        raise ValueError("No usable trades or L2 book snapshots were found in the JSONL files.")
+        raise ValueError("No usable trades, L2 snapshots or funding observations were found in the JSONL files.")
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
     parquet_path = output_path / "dmpe_BTCUSD_live_orderflow_1m.parquet"
     csv_path = output_path / "dmpe_BTCUSD_live_orderflow_1m.csv"
-    features.to_parquet(parquet_path, index=False, compression="zstd")
-    features.to_csv(csv_path, index=False)
+    if not features.empty:
+        features.to_parquet(parquet_path, index=False, compression="zstd")
+        features.to_csv(csv_path, index=False)
     funding_parquet = output_path / "dmpe_BTCUSD_funding_observations.parquet"
     funding_csv = output_path / "dmpe_BTCUSD_funding_observations.csv"
     if not funding_observations.empty:
@@ -349,8 +350,8 @@ def build_live_orderflow_dataset(
     report = {
         "built_at_utc": datetime.now(timezone.utc).isoformat(),
         "input": ingest,
-        "first_close_time_utc": features["time"].min().isoformat(),
-        "last_close_time_utc": features["time"].max().isoformat(),
+        "first_close_time_utc": features["time"].min().isoformat() if not features.empty else None,
+        "last_close_time_utc": features["time"].max().isoformat() if not features.empty else None,
         "minutes": int(len(features)),
         "minutes_with_trade_events": int(features["trade_feed_observed"].sum()) if "trade_feed_observed" in features else 0,
         "minutes_with_l2_events": int(features["l2_feed_observed"].sum()) if "l2_feed_observed" in features else 0,
@@ -376,8 +377,8 @@ def build_live_orderflow_dataset(
             ),
             "scope": "Live capture only; does not reconstruct historical tick or order-book history.",
         },
-        "output_parquet": str(parquet_path),
-        "output_csv": str(csv_path),
+        "output_parquet": str(parquet_path) if not features.empty else None,
+        "output_csv": str(csv_path) if not features.empty else None,
     }
     (output_path / "live_orderflow_report.json").write_text(
         json.dumps(report, indent=2), encoding="utf-8"
