@@ -90,6 +90,7 @@
 - [x] Include two-sided taker fees including published 18% GST and slippage sensitivity (0/1/2/5/10 bps per side)
 - [x] Report trade-by-trade P&L, fees, win rate, profit factor, expectancy and drawdown
 - [x] Validate simulator run 41497573112 and confirm all 25 tests pass (run 41497573126)
+- [x] Correct barrier anchoring to the signal candle close and rerun execution simulation successfully (run 41508618660); tests passed (run 41508618604). This corrected run supersedes the initial Stage 4 metrics.
 - [ ] Add funding settlement payments, verified spread/market-impact estimates and account-currency conversion
 - [ ] Test stability on further unseen forward data and block-bootstrap confidence intervals
 
@@ -97,7 +98,7 @@
 
 - Simulation completed for 9 horizon/barrier variants and 5 slippage assumptions (0, 1, 2, 5 and 10 bps per side), using 5.9 bps taker fees per side including the configured GST assumption.
 - Every variant was net negative even at the optimistic 0 bps slippage setting. Therefore the current candle-derived DMPE predictions do not pass the first cost-aware tradeability gate.
-- Best of the tested variants at 0 bps assumed slippage was 3h / 1.0× volatility: 211 trades, 48.3% profitable trades, profit factor 0.65, net P&L −$19.41, fees $22.22, expectancy −$0.092 per configured 0.001 BTC contract.
+- Initial best of the tested variants at 0 bps assumed slippage was 3h / 1.0× volatility: 211 trades, 48.3% profitable trades, profit factor 0.65, net P&L −$19.41, fees $22.22, expectancy −$0.092 per configured 0.001 BTC contract.
 - 1h / 1.0× at 0 bps: 183 trades, 42.6% profitable, profit factor 0.50, net P&L −$12.98.
 - 15m / 0.75× at 0 bps: 1,898 trades, 6.6% profitable, profit factor 0.023, net P&L −$175.58; the very tight barriers are overwhelmed by round-trip fees.
 - Increasing assumed slippage made all results worse. Funding, market impact, queue position, INR conversion, leverage/liquidation and portfolio-level overlapping-position constraints are not yet modelled.
@@ -119,6 +120,15 @@
 - [ ] Add block-bootstrap confidence intervals, family-wise multiple-testing correction, and predeclared trend/range/volatility regime reports.
 - [ ] Reserve prospective final holdout data from 2026-11-03 through 2027-01-02 UTC; previously inspected Stage 3/4 test windows are not eligible as the final holdout.
 - [ ] After all research gates pass, run 4–8 weeks of paper observation with a kill switch and no real orders.
+
+## Corrected Stage 4 replay (run 41508618660)
+
+- Replayed after anchoring stop/target barriers to the completed signal candle close, matching the label builder rather than shifting them to the next candle's entry open.
+- All 9 symmetric variants remained net negative at every tested slippage assumption.
+- Best zero-slippage result remained 3h / 1.0x: 211 trades, 48.3% win rate, profit factor 0.647, net P&L −$19.37 per configured 0.001 BTC contract, fees $22.22, expectancy −$0.092 per trade.
+- 1h / 1.0x: 183 trades, 41.5% win rate, profit factor 0.469, net P&L −$14.11.
+- 15m / 1.0x: 914 trades, 12.3% win rate, profit factor 0.058, net P&L −$79.77.
+- Conclusion unchanged: candle-only symmetric predictions do not pass the cost-aware gate. This replay still uses taker entry/exit and does not test the new asymmetric labels or maker fills.
 
 ## Next milestones
 1. Provision the VPS using `deploy/vps/README.md`; verify recorder uptime, heartbeats, event coverage and off-host backups.
