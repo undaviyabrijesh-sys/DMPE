@@ -12,13 +12,13 @@ Run as root on a fresh Ubuntu LTS host:
 
 ```bash
 apt-get update && apt-get install -y git python3 python3-venv python3-pip
-useradd --system --create-home --home-dir /opt/dmpe --shell /usr/sbin/nologin dmpe
+useradd --system --create-home --home-dir /var/lib/dmpe --shell /usr/sbin/nologin dmpe
 mkdir -p /var/lib/dmpe/live
-chown -R dmpe:dmpe /var/lib/dmpe
-sudo -u dmpe git clone https://github.com/undaviyabrijesh-sys/DMPE.git /opt/dmpe
-sudo -u dmpe python3 -m venv /opt/dmpe/.venv
-sudo -u dmpe /opt/dmpe/.venv/bin/pip install --upgrade pip
-sudo -u dmpe /opt/dmpe/.venv/bin/pip install -r /opt/dmpe/requirements.txt
+git clone https://github.com/undaviyabrijesh-sys/DMPE.git /opt/dmpe
+chown -R dmpe:dmpe /opt/dmpe /var/lib/dmpe
+runuser -u dmpe -- python3 -m venv /opt/dmpe/.venv
+runuser -u dmpe -- /opt/dmpe/.venv/bin/pip install --upgrade pip
+runuser -u dmpe -- /opt/dmpe/.venv/bin/pip install -r /opt/dmpe/requirements.txt
 cp /opt/dmpe/deploy/vps/dmpe-live-recorder.service /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now dmpe-live-recorder
