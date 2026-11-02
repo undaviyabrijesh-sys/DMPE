@@ -31,7 +31,7 @@ def test_l2_snapshot_calculates_spread_depth_and_microprice_pressure():
     assert parsed["mid_price"] == 100.0
     assert parsed["spread_bps"] == 200.0
     assert parsed["depth_imbalance_1"] == 1 / 3
-    assert parsed["depth_imbalance_3"] == 1 / 3
+    assert parsed["depth_imbalance_5"] == 1 / 3
     assert parsed["microprice_mid_bps"] > 0
 
 
