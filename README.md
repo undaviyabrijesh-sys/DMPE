@@ -50,6 +50,19 @@ The live pane reads the JSONL files produced by that recorder. The Streamlit app
 
 **Important:** the current desk is a data and research interface, not a proven trading system. It intentionally displays FLAT (0) until a model passes chronological walk-forward validation and net-of-cost evaluation. EMA, return, volatility and order-book metrics are descriptive candidate features, not trade recommendations.
 
+## Stage 1 — Historical audit and feature engineering
+
+The first reproducible feature workflow reads the historical backfill artifact, profiles each dataset's cadence and largest gaps, then creates a 1-minute research table. It currently builds 39 candidate point-in-time descriptors and 9 forward-only target columns for 15m, 1h and 3h horizons.
+
+Candidate descriptors include lagged returns, realized volatility, ATR, normalized moving-average distance, volume surprise, candle shape, UTC time seasonality, mark-price basis/returns, hourly funding-rate changes and hourly open-interest changes. Funding/OI observations are delayed by one full hour plus one minute before joining. Negative funding is preserved as valid data. The minute grid makes missing candles explicit; price is not forward-filled, rolling features require complete lookback windows, and forward labels are null when the future window crosses missing data.
+
+Run **Actions → DMPE feature engineering**. The default source run ID points to the completed historical backfill (41481361783); choose another backfill run ID when using a newer dataset. The workflow uploads:
+- `metadata/history_profile.json` and `history_profile.csv`: cadence, missing intervals, largest gaps and exact mark/price timestamp alignment.
+- `processed/dmpe_BTCUSD_1m_features.parquet`: features plus separate `target_*` columns.
+- `processed/feature_schema.json` and `feature_build_report.json`: feature/label contract and null-rate summary.
+
+The target columns are for research evaluation only. Never include `target_*` columns as model inputs. No predictive model or trading signal is trained in this stage.
+
 ## Install locally
 Python 3.11+ recommended:
 ```bash
