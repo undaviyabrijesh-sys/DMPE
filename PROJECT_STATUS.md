@@ -262,3 +262,18 @@ Workflow: https://github.com/undaviyabrijesh-sys/DMPE/actions/runs/41577802028
 - [x] Added a synthetic persistent-GARCH recovery regression test (known alpha=0.08, beta=0.90).
 - [ ] Re-run all CI and the QLIKE workflow using the corrected likelihood. The first QLIKE artifact and its metrics are invalid and must not be interpreted.
 - [ ] Re-run the GARCH/HMM feature ablation after the correction before relying on its GARCH-related comparison; the HMM implementation/results are not changed by this likelihood correction.
+
+
+### Corrected GARCH QLIKE results — completed 2026-11-03
+
+- [x] Corrected likelihood run completed successfully: workflow run [41588407996](https://github.com/undaviyabrijesh-sys/DMPE/actions/runs/41588407996); report artifact dmpe-garch-qlike-41588407996.
+- [x] CI passed: 60 tests, including the synthetic known-parameter GARCH recovery test.
+- Evaluation used the longest contiguous complete 5m segment (249,334 returns), with 37,353 1h and 37,329 3h out-of-sample forecasts from 2026-06-25 through 2026-11-02. Training ended 2026-02-15; a 3h purge was applied.
+- Corrected Gaussian-QMLE fit: omega=1.79899e-8, alpha=0.11443, beta=0.88456, alpha+beta=0.99899 (near the stationarity cap).
+- **1h QLIKE:** GARCH -10.4313; trailing RV - (score 97.8708, affected by one near-zero trailing forecast); EWMA(0.94) -10.3769. GARCH-minus-EWMA paired day-block 95% interval: [-0.0804, -0.0262].
+- **3h QLIKE:** GARCH -9.2096; trailing RV -9.0518; EWMA(0.94) -9.1039. GARCH-minus-trailing-RV interval: [-0.2181, -0.0971]; GARCH-minus-EWMA interval: [-0.1530, -0.0527].
+- Calibration diagnostic: aggregate forecast/realized variance ratio was 1.20 (1h) and 1.37 (3h) for GARCH, versus approximately 1.00 for both simple baselines. Mean absolute log-variance error was also higher for GARCH (0.85/0.87) than EWMA (0.72/0.69).
+- **Interpretation:** GARCH wins on mean QLIKE versus EWMA in both horizons, but over-forecasts aggregate variance and has worse absolute log error. Treat it as a promising conservative risk-forecast candidate, not a calibrated forecast or directional alpha. The 1h trailing-RV comparison is especially sensitive to a near-zero forecast; rely more on the paired GARCH-vs-EWMA comparison.
+- [ ] Test Student-t innovations and asymmetric EGARCH/GJR-GARCH as separately declared follow-ups for Bitcoin heavy tails and leverage effects. Do not tune them on the current test segment; use fresh validation/forward data.
+- [ ] Review the corrected GARCH/HMM directional ablation rerun (workflow run 41588160449). The earlier run 41577802028 used the defective likelihood and is superseded for any GARCH-related conclusion.
+- **Release gate:** no direction prediction, trading signal, paper trading or live execution is approved by this volatility-only result.
