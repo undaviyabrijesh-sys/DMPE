@@ -31,15 +31,10 @@ def build_complete_5m_bars(frame: pd.DataFrame) -> pd.DataFrame:
     work = work.dropna().sort_values("time").drop_duplicates("time")
     indexed = work.set_index("time")
     bars = indexed["close"].resample("5min", closed="right", label="right").agg(
-        close="last", count="count", first_time="first"
-    )
-    expected_first = bars.index - pd.Timedelta(minutes=4)
-    complete = (
-        (bars["count"] == 5)
-        & (bars["first_time"].index == bars.index)
+        close="last", count="count"
     )
     # Explicitly verify all five minute closes are present and contiguous.
-    complete[:] = False
+    complete = pd.Series(False, index=bars.index)
     grouped = indexed["close"].resample("5min", closed="right", label="right")
     for stamp, values in grouped:
         if len(values) == 5:
@@ -74,18 +69,23 @@ def add_causal_regime_features(
     frame: pd.DataFrame, bars: pd.DataFrame, train_end: pd.Timestamp,
     max_hmm_iter: int = 30,
 ) -> tuple[pd.DataFrame, dict]:
-    returns_train = bars.loc[
-        (bars["time"] <= train_end) & bars["log_return"].notna(), "log_return"
-    ].to_numpy(dtype=float)
+    valid_obs = np.isfinite(bars[["log_return", "log_trailing_vol"]].to_numpy(dtype=float)).all(axis=1)
+    train_mask = (bars["time"] <= train_end).to_numpy()
+    train_candidates = bars.loc[train_mask & bars["log_return"].notna()]
+    if train_candidates.empty:
+        raise ValueError("No 5-minute training returns before the chronological cutoff.")
+    segment_sizes = train_candidates.groupby("segment").size().sort_values(ascending=False)
+    training_segment = int(segment_sizes.index[0])
+    selected_train = train_mask & (bars["segment"].to_numpy() == training_segment)
+    returns_train = bars.loc[selected_train & bars["log_return"].notna(), "log_return"].to_numpy(dtype=float)
     if len(returns_train) < 100:
-        raise ValueError("Insufficient contiguous 5-minute returns before training cutoff.")
+        raise ValueError("Insufficient contiguous 5-minute returns in the selected training segment.")
     garch = fit_garch11(returns_train)
     if not garch.success:
         raise RuntimeError("GARCH optimizer did not converge; refusing to report an ablation.")
 
     obs = bars[["log_return", "log_trailing_vol"]].to_numpy(dtype=float)
-    valid_obs = np.isfinite(obs).all(axis=1)
-    train_obs = obs[(bars["time"] <= train_end).to_numpy() & valid_obs]
+    train_obs = obs[selected_train & valid_obs]
     hmm = GaussianHMM(n_states=3, max_iter=max_hmm_iter).fit(train_obs)
 
     enriched = bars.copy()
@@ -135,6 +135,9 @@ def add_causal_regime_features(
             "alpha_plus_beta": garch.alpha + garch.beta,
             "optimizer_success": garch.success,
             "training_returns": int(len(returns_train)),
+            "training_segment_id": training_segment,
+            "training_segment_start_utc": bars.loc[selected_train, "time"].min().isoformat(),
+            "training_segment_end_utc": bars.loc[selected_train, "time"].max().isoformat(),
         },
         "hmm": {
             "states": 3, "max_iterations": max_hmm_iter,
