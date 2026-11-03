@@ -16,6 +16,8 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import streamlit as st
 
+from dmpe_zones import add_zones_to_chart, detect_structure_zones
+
 ROOT = Path(__file__).resolve().parent
 DATA_ROOT = Path(os.getenv("DMPE_DATA_DIR", ROOT / "data" / "raw"))
 HISTORY_DIR = DATA_ROOT / "history"
@@ -191,7 +193,7 @@ def fmt_pct(value: float | None) -> str:
     return "—" if value is None or pd.isna(value) else f"{value:+.2f}%"
 
 
-def build_price_chart(frame: pd.DataFrame, max_bars: int) -> go.Figure:
+def build_price_chart(frame: pd.DataFrame, max_bars: int, zones: list[dict[str, Any]] | None = None) -> go.Figure:
     view = frame.tail(max_bars).copy()
     close = view["close"].astype(float)
     view["ema20"] = close.ewm(span=20, adjust=False).mean()
@@ -209,6 +211,7 @@ def build_price_chart(frame: pd.DataFrame, max_bars: int) -> go.Figure:
                              line={"color": "#f59e0b", "width": 1.2}), row=1, col=1)
     fig.add_trace(go.Bar(x=view["time"], y=view["volume"], name="Volume",
                          marker_color="#64748b", opacity=0.75), row=2, col=1)
+    add_zones_to_chart(fig, zones or [], view)
     fig.update_layout(template="plotly_dark", height=640,
                       margin={"l": 10, "r": 10, "t": 30, "b": 10},
                       xaxis_rangeslider_visible=False, hovermode="x unified",
@@ -527,8 +530,28 @@ def main() -> None:
         top[2].metric("15m return", fmt_pct(metrics["return_15m"]))
         top[3].metric("1h return", fmt_pct(metrics["return_1h"]))
         top[4].metric("3h return", fmt_pct(metrics["return_3h"]))
-        st.plotly_chart(build_price_chart(candles, chart_bars), use_container_width=True,
+        zones = detect_structure_zones(candles)
+        chart = build_price_chart(candles, chart_bars, zones)
+        st.plotly_chart(chart, use_container_width=True,
                         config={"displaylogo": False, "scrollZoom": True})
+        st.markdown("**Structure zones · DNS / RBS / Supply / SBR**")
+        if zones:
+            zone_rows = [{
+                "Type": z["kind"], "Zone low": z["low"], "Zone high": z["high"],
+                "Width": z["high"] - z["low"], "Strength (ATR)": z["strength"],
+                "Retests": z["touches"], "Distance (ATR)": z["distance_atr"],
+                "Origin": z["created_at"],
+            } for z in zones]
+            st.dataframe(pd.DataFrame(zone_rows), use_container_width=True, hide_index=True)
+            nearest = min(zones, key=lambda z: z["distance_atr"])
+            st.caption(
+                f'Nearest structure: {nearest["kind"]} · '
+                f'{nearest["low"]:,.2f}–{nearest["high"]:,.2f} · '
+                f'{nearest["distance_atr"]:.2f} ATR from current price. '
+                "Zones are structural context, not automatic entry signals."
+            )
+        else:
+            st.info("No confirmed structure zones found on this timeframe yet. Increase chart history or wait for a completed displacement.")
         secondary = st.columns(4)
         secondary[0].metric("ATR(14)", "—" if metrics["atr"] is None else f"USD {metrics['atr']:,.2f}")
         secondary[1].metric("ATR / price", "—" if metrics["atr_pct"] is None else f"{metrics['atr_pct']:.3f}%")
