@@ -190,6 +190,22 @@ def run(frame: pd.DataFrame, feature_columns: list[str]) -> dict:
                 "split": split,
                 **score,
             })
+    cutoff_diagnostics = {}
+    for horizon in HORIZONS:
+        for multiple in MULTIPLIERS:
+            tag = f"{multiple:g}".replace(".", "p")
+            state_col = f"barrier_state_{horizon}_{tag}rv"
+            state_values = pd.to_numeric(
+                labelled.loc[labelled["time"] <= SIGNAL_CUTOFF, state_col], errors="coerce"
+            )
+            cutoff_diagnostics[state_col] = {
+                "signal_rows_through_cutoff": int(len(state_values)),
+                "up_first": int((state_values == 1).sum()),
+                "down_first": int((state_values == -1).sum()),
+                "no_touch": int((state_values == 0).sum()),
+                "ambiguous_same_minute": int((state_values == 2).sum()),
+                "invalid_or_incomplete": int((state_values == -2).sum()),
+            }
     return {
         "project": "DMPE",
         "purpose": "Exploratory symmetric event-label predictability screen; not a trading test.",
@@ -204,7 +220,7 @@ def run(frame: pd.DataFrame, feature_columns: list[str]) -> dict:
         "model_families": ["prior baseline", "logistic regression", "histogram gradient boosting"],
         "weighting_variants": ["unweighted", "balanced class weights"],
         "metric_policy": "Report validation balanced accuracy, macro-F1, log loss and multiclass Brier; no threshold or barrier is selected automatically.",
-        "label_diagnostics_all_rows": full_label_report,
+        "label_diagnostics_through_cutoff_only": cutoff_diagnostics,
         "results": results,
         "trading_approval": False,
     }
