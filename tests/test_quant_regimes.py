@@ -62,3 +62,35 @@ def test_hmm_rejects_unfitted_filter():
     model = GaussianHMM()
     with pytest.raises(RuntimeError):
         model.filtered_probabilities(np.ones((2, 2)))
+
+
+def test_kalman_filter_is_causal_after_training_cutoff():
+    from dmpe.quant_regimes import KalmanTrendFilter
+    rng = np.random.default_rng(44)
+    prices = 10 + np.cumsum(rng.normal(0, 0.001, 500))
+    model = KalmanTrendFilter().fit(prices[:400])
+    a = model.filter(prices[400:])
+    changed = prices[400:].copy()
+    changed[30:] += 5
+    b = model.filter(changed)
+    np.testing.assert_allclose(a[:30], b[:30])
+
+
+def test_bayesian_odds_update_matches_sequential_bayes():
+    from dmpe.quant_regimes import bayesian_odds_update
+    posterior = bayesian_odds_update(0.5, np.array([2.0, 0.5]))
+    assert posterior[0] == pytest.approx(2.0 / 3.0)
+    assert posterior[1] == pytest.approx(0.5)
+    with pytest.raises(ValueError):
+        bayesian_odds_update(0.5, np.array([0.0]))
+
+
+def test_monte_carlo_probabilities_sum_to_one_and_are_reproducible():
+    from dmpe.quant_regimes import monte_carlo_barrier_probabilities
+    rng = np.random.default_rng(22)
+    history = rng.normal(0, 0.001, 1000)
+    a = monte_carlo_barrier_probabilities(history, 0.2, 0.3, 30, n_paths=500, seed=9)
+    b = monte_carlo_barrier_probabilities(history, 0.2, 0.3, 30, n_paths=500, seed=9)
+    assert a == b
+    total = a["target_first_probability"] + a["stop_first_probability"] + a["no_touch_probability"]
+    assert total == pytest.approx(1.0)
