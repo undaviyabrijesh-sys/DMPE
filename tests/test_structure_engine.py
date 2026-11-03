@@ -55,5 +55,6 @@ def test_mtf_builder_exposes_all_three_modules_and_never_future_context():
     }
     assert required.issubset(result.columns)
     # The latest minute cannot see a context bar whose close is in the future.
-    assert (result["4h_available_at"] <= result["available_at"]).all()
-    assert (result["1h_available_at"] <= result["available_at"]).all()
+    for timeframe in ("4h", "1h", "15m"):
+        observed = result[f"{timeframe}_available_at"].dropna()
+        assert (observed <= result.loc[observed.index, "available_at"]).all()
