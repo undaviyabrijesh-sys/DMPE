@@ -1,0 +1,67 @@
+name: DMPE MTF gate ablation
+
+on:
+  push:
+    paths:
+      - "scripts/evaluate_structure_gate_ablation.py"
+      - "src/dmpe/structure_engine.py"
+      - "src/dmpe/structure_backtest.py"
+      - ".github/workflows/mtf-gate-ablation.yml"
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: "Completed historical backfill workflow run ID"
+        required: true
+        default: "41481361783"
+        type: string
+      rr:
+        description: "Comma-separated R multiples"
+        required: true
+        default: "1,2,3"
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      SOURCE_RUN_ID: ${{ github.event.inputs.source_run_id || '41481361783' }}
+      RR_GRID: ${{ github.event.inputs.rr || '1,2,3' }}
+    steps:
+      - name: Check out DMPE
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Download historical backfill artifact
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: ${{ env.SOURCE_RUN_ID }}
+          name: dmpe-historical-data-${{ env.SOURCE_RUN_ID }}
+          path: stage1_input
+      - name: Run gate ablation replay
+        run: |
+          python scripts/evaluate_structure_gate_ablation.py \
+            --price-file stage1_input/history/BTCUSD_1m.parquet \
+            --output-dir mtf_gate_ablation_output \
+            --rr "$RR_GRID" \
+            --fee-bps-per-side 5.9 \
+            --slippage-bps-per-side 1.0 \
+            --max-holding-minutes 60
+      - name: Upload gate ablation research results
+        uses: actions/upload-artifact@v4
+        with:
+          name: dmpe-mtf-gate-ablation-${{ github.run_id }}
+          path: mtf_gate_ablation_output
+          if-no-files-found: error
+          retention-days: 30
