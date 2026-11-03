@@ -1,0 +1,69 @@
+name: DMPE multi-timeframe structure evaluation
+
+on:
+  push:
+    paths:
+      - ".github/workflows/mtf-structure-evaluation.yml"
+      - "src/dmpe/structure_engine.py"
+      - "src/dmpe/structure_backtest.py"
+      - "scripts/evaluate_structure_engine.py"
+      - "tests/test_structure_engine.py"
+      - "tests/test_structure_backtest.py"
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: "Historical backfill workflow run ID"
+        required: true
+        default: "41481361783"
+        type: string
+      rr:
+        description: "Comma-separated R multiples to test"
+        required: true
+        default: "1,2,3"
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      SOURCE_RUN_ID: ${{ github.event.inputs.source_run_id || '41481361783' }}
+      RR_GRID: ${{ github.event.inputs.rr || '1,2,3' }}
+    steps:
+      - name: Check out DMPE
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Download historical backfill artifact
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: ${{ env.SOURCE_RUN_ID }}
+          name: dmpe-historical-data-${{ env.SOURCE_RUN_ID }}
+          path: stage1_input
+      - name: Run independent entry-module replay
+        run: |
+          python scripts/evaluate_structure_engine.py \
+            --price-file stage1_input/history/BTCUSD_1m.parquet \
+            --output-dir mtf_structure_output \
+            --rr "$RR_GRID" \
+            --fee-bps-per-side 5.9 \
+            --slippage-bps-per-side 1.0 \
+            --max-holding-minutes 60
+      - name: Upload MTF structure research results
+        uses: actions/upload-artifact@v4
+        with:
+          name: dmpe-mtf-structure-evaluation-${{ github.run_id }}
+          path: mtf_structure_output
+          if-no-files-found: error
+          retention-days: 30
