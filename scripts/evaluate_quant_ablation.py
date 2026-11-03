@@ -186,7 +186,7 @@ def main() -> None:
     parser.add_argument("--feature-file", required=True)
     parser.add_argument("--schema-file", required=True)
     parser.add_argument("--output-dir", default="quant_ablation_output")
-    parser.add_argument("--hmm-iterations", type=int, default=30)
+    parser.add_argument("--hmm-iterations", type=int, default=12)
     args = parser.parse_args()
 
     feature_path, schema_path = Path(args.feature_file), Path(args.schema_file)
