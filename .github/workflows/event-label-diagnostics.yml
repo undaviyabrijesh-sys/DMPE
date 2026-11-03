@@ -8,6 +8,13 @@ on:
       - "tests/test_event_label_balance.py"
       - "src/dmpe/labels.py"
       - "requirements.txt"
+  pull_request:
+    paths:
+      - ".github/workflows/event-label-diagnostics.yml"
+      - "scripts/diagnose_event_label_balance.py"
+      - "tests/test_event_label_balance.py"
+      - "src/dmpe/labels.py"
+      - "requirements.txt"
   workflow_dispatch:
     inputs:
       feature_run_id:
