@@ -35,3 +35,34 @@ def test_zone_boundaries_are_ordered_and_never_zero_width():
         assert zone["low"] < zone["high"]
         assert zone["kind"] in {"DEMAND", "SUPPLY", "RBS", "SBR"}
         assert zone["strength"] > 0
+
+
+def test_swing_high_uses_full_candle_range_and_waits_for_confirmation():
+    rows = []
+    for i in range(24):
+        close = 100.0 + (0.12 if i % 2 else -0.12)
+        rows.append({
+            "time": pd.Timestamp("2026-01-01", tz="UTC") + pd.Timedelta(minutes=15 * i),
+            "open": close - 0.05,
+            "high": close + 1.0,
+            "low": close - 1.0,
+            "close": close,
+        })
+    rows[10] = {
+        "time": rows[10]["time"], "open": 106.0,
+        "high": 108.0, "low": 105.0, "close": 107.0,
+    }
+    for i, close in zip((11, 12, 13), (103.0, 100.0, 97.0)):
+        rows[i] = {
+            "time": rows[i]["time"], "open": close + 0.5,
+            "high": close + 1.0, "low": close - 1.0, "close": close,
+        }
+
+    zones = detect_structure_zones(pd.DataFrame(rows))
+    swing = [z for z in zones if z.get("origin_type") == "SWING_HIGH"]
+    assert swing
+    assert swing[0]["low"] == 105.0
+    assert swing[0]["high"] == 108.0
+    assert swing[0]["origin_time"] == rows[10]["time"]
+    assert swing[0]["created_at"] == rows[13]["time"]
+    assert swing[0]["origin_index"] == 13
