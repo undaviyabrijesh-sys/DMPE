@@ -207,3 +207,19 @@ These modules are research components, not yet integrated into the production fe
 - [ ] Evaluate the five components individually and incrementally, then only retain those that improve net-of-cost out-of-sample expectancy, drawdown or calibrated risk estimates.
 
 The five methods now exist as independent research utilities, not as an integrated trading model. In particular, Monte Carlo probabilities inherit the empirical bootstrap assumptions, Bayesian updates are only meaningful with calibrated likelihood ratios, and none of these components has demonstrated profitability yet.
+
+
+## Quantitative model implementation and ablation (2026-11-03)
+
+- [x] Added constrained GARCH(1,1), three-state Gaussian HMM, causal Kalman local-trend filter, sequential Bayesian odds updater and empirical block-bootstrap Monte Carlo barrier simulator as separate research utilities.
+- [x] Added synthetic unit tests for stationarity, causal filtering, probability normalization, Bayesian odds arithmetic and reproducible Monte Carlo outputs.
+- [x] Added a reproducible chronological GARCH/HMM feature-ablation workflow using the existing Stage 1 feature artifact.
+- [x] Derived a three-class directional event target from the already-frozen separate long/short 1R-stop / 3R-target labels; conflicting long-and-short target wins, same-minute ambiguity and incomplete outcomes are excluded.
+- [x] Added complete-5m-bucket construction and gap-reset tests; quant features use completed 5m observations and are joined backward with a five-minute staleness limit.
+- [ ] Complete the current GARCH/HMM ablation run and review its report. A previous attempt exposed that the Stage 1 artifact contains asymmetric event labels rather than the assumed symmetric label names; the evaluator was corrected to use the actual preregistered labels.
+- [ ] If either model improves validation/test classification and calibration, run the exact same out-of-sample predictions through the fee/slippage/funding-aware execution simulator. Classification improvement alone is not a profitability result.
+- [ ] Cross-fit training-period regime features before any confirmatory or prospective use; current ablation is exploratory and model parameters are fitted on a contiguous training segment only.
+- [ ] Extend the ablation to Kalman and calibrated Bayesian state-conditional probabilities; evaluate Monte Carlo as a separate risk/target probability estimator, not as an assumed alpha source.
+- [ ] Add block-bootstrap uncertainty and multiple-comparison controls before selecting any model variant.
+
+**Important:** the five quantitative utilities are implemented, but only GARCH and HMM are currently wired into the new ablation. None has demonstrated incremental net trading profit. No model is approved for paper/live execution.
