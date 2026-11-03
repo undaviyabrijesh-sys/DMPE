@@ -178,10 +178,17 @@ def evaluate_horizon(bars: pd.DataFrame, name: str, horizon_bars: int):
         summaries[model] = {
             "mean_qlike": float(loss.mean()),
             "median_qlike": float(np.median(loss)),
-            "mean_forecast_realized_variance_ratio": float(np.mean(forecast / np.maximum(y, 1e-18))),
+            "mean_forecast_variance": float(np.mean(forecast)),
+            "mean_realized_variance": float(np.mean(y)),
+            # Aggregate ratio is stable when an individual realized window is zero.
+            "aggregate_forecast_to_realized_variance_ratio": float(
+                np.mean(forecast) / max(float(np.mean(y)), 1e-18)
+            ),
             "mean_absolute_log_variance_error": float(np.mean(np.abs(
                 np.log(forecast) - np.log(np.maximum(y, 1e-18))
             ))),
+            "zero_realized_variance_windows": int(np.sum(y == 0.0)),
+            "forecast_at_numerical_floor": int(np.sum(forecast <= 1.0001e-12)),
         }
     comparisons = {}
     for baseline in ("trailing_rv", "ewma_094"):
