@@ -1,8 +1,12 @@
+import sys
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
 
-from scripts.evaluate_garch_qlike import (
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+from evaluate_garch_qlike import (
     _day_block_ci, _garch_path, build_complete_5m_bars, qlike,
 )
 from dmpe.quant_regimes import fit_garch11
