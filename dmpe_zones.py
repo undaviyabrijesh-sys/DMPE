@@ -262,7 +262,8 @@ def add_zones_to_chart(fig: Any, zones: list[dict[str, Any]], view: pd.DataFrame
         )
         fig.add_annotation(
             x=x1, y=(zone["low"] + zone["high"]) / 2,
-            xref="x", yref="y", text=f'{zone["kind"]} · {zone["strength"]:.1f}x',
+            xref="x", yref="y",
+            text=f'{zone["kind"]} · {zone.get("origin_type", "BASE_LEG")} · {zone["strength"]:.1f}x',
             showarrow=False, xanchor="left", font={"size": 9, "color": line},
             bgcolor="rgba(15,23,42,0.65)", row=1, col=1,
         )
