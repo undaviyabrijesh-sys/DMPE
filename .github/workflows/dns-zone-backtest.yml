@@ -1,0 +1,54 @@
+name: DMPE causal DNS zone backtest
+
+on:
+  push:
+    paths:
+      - "dmpe_zones.py"
+      - "scripts/evaluate_dns_zones.py"
+      - ".github/workflows/dns-zone-backtest.yml"
+      - "tests/test_dmpe_zones.py"
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: dmpe-dns-zone-backtest
+  cancel-in-progress: false
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Download verified historical BTC candles
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 41481361783
+          name: dmpe-historical-data-41481361783
+          path: history_input
+      - name: Run causal DNS zone backtest
+        run: |
+          PYTHONPATH=. python scripts/evaluate_dns_zones.py \
+            --price-file history_input/history/BTCUSD_1m.parquet \
+            --output-dir dmpe_dns_backtest \
+            --days 180 \
+            --rr 1,2,3 \
+            --fee-bps-per-side 5.9 \
+            --slippage-bps-per-side 1.0
+      - name: Upload trade ledger and report
+        uses: actions/upload-artifact@v4
+        with:
+          name: dmpe-dns-zone-backtest-${{ github.run_id }}
+          path: dmpe_dns_backtest/
+          if-no-files-found: error
+          retention-days: 30
