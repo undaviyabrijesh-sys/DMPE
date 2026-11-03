@@ -146,27 +146,32 @@ def run(frame: pd.DataFrame, feature_columns: list[str]) -> dict:
         raise ValueError("Invalid timestamps in feature data.")
     data = data.sort_values("time").reset_index(drop=True)
 
-    labelled, _, _, full_label_report = add_barrier_labels(
+    # The last needed future bar is the latest signal cutoff plus its horizon.
+    max_data_time = max(
+        SIGNAL_CUTOFFS[h] + pd.Timedelta(minutes=minutes)
+        for h, minutes in HORIZONS.items()
+    )
+    data = data.loc[data["time"] <= max_data_time].copy()
+    labelled, _, _, _ = add_barrier_labels(
         data,
         horizons=HORIZONS,
         multipliers=MULTIPLIERS,
         volatility_columns=VOL_COLUMNS,
     )
-    # Signal-time cutoff is applied before constructing model samples. The final
-    # 15% chronological segment is reserved and is never evaluated.
-    labelled = labelled.loc[labelled["time"] <= SIGNAL_CUTOFF].copy()
     results = []
+    cutoff_diagnostics = {}
     for horizon, minutes in HORIZONS.items():
-        epoch_minute = labelled["time"].astype("int64") // 60_000_000_000
+        horizon_data = labelled.loc[labelled["time"] <= SIGNAL_CUTOFFS[horizon]].copy()
+        epoch_minute = horizon_data["time"].astype("int64") // 60_000_000_000
         cadence = epoch_minute.mod(minutes).eq(0)
         for multiple in MULTIPLIERS:
             tag = f"{multiple:g}".replace(".", "p")
             label_col = f"barrier_label_{horizon}_{tag}rv"
             state_col = f"barrier_state_{horizon}_{tag}rv"
-            y_series = pd.to_numeric(labelled[label_col], errors="coerce")
-            state = pd.to_numeric(labelled[state_col], errors="coerce")
+            y_series = pd.to_numeric(horizon_data[label_col], errors="coerce")
+            state = pd.to_numeric(horizon_data[state_col], errors="coerce")
             valid = cadence & y_series.notna() & state.isin([-1, 0, 1])
-            sample = labelled.loc[valid, ["time", *feature_columns]].copy().reset_index(drop=True)
+            sample = horizon_data.loc[valid, ["time", *feature_columns]].copy().reset_index(drop=True)
             y = y_series.loc[valid].astype("int8").to_numpy()
             train_idx, val_idx, split = chronological_train_validation(sample, minutes)
             x = sample[feature_columns].apply(pd.to_numeric, errors="coerce")
@@ -190,13 +195,8 @@ def run(frame: pd.DataFrame, feature_columns: list[str]) -> dict:
                 "split": split,
                 **score,
             })
-    cutoff_diagnostics = {}
-    for horizon in HORIZONS:
-        for multiple in MULTIPLIERS:
-            tag = f"{multiple:g}".replace(".", "p")
-            state_col = f"barrier_state_{horizon}_{tag}rv"
             state_values = pd.to_numeric(
-                labelled.loc[labelled["time"] <= SIGNAL_CUTOFF, state_col], errors="coerce"
+                horizon_data[state_col], errors="coerce"
             )
             cutoff_diagnostics[state_col] = {
                 "signal_rows_through_cutoff": int(len(state_values)),
@@ -209,8 +209,8 @@ def run(frame: pd.DataFrame, feature_columns: list[str]) -> dict:
     return {
         "project": "DMPE",
         "purpose": "Exploratory symmetric event-label predictability screen; not a trading test.",
-        "signal_time_cutoff_utc": SIGNAL_CUTOFF.isoformat(),
-        "data_policy": "Historical samples after the cutoff are excluded. Final 15% of the pre-cutoff sample is reserved and unscored.",
+        "signal_time_cutoffs_utc": {h: value.isoformat() for h, value in SIGNAL_CUTOFFS.items()},
+        "data_policy": "Signal timestamps after each horizon cutoff are excluded. Only future bars needed to resolve labels up to the cutoff are retained. Final 15% of each pre-cutoff sample is reserved and unscored.",
         "holdout_policy": "No historical test metrics are produced. The prospective holdout is not accessed.",
         "horizons_minutes": HORIZONS,
         "barrier_multipliers": list(MULTIPLIERS),
