@@ -1,6 +1,6 @@
 # DMPE prospective prediction-vs-structure comparison
 
-**Status:** Frozen protocol for a new prospective comparison; no results have been inspected.
+**Status:** Protocol amended on 2026-11-03 to permit bounded target-geometry exploration and frozen regime adaptation; no prospective results have been inspected.
 **Freeze date:** 2026-11-03 UTC.
 **Planned prospective evaluation window:** 2026-11-04 00:00 UTC through 2027-01-03 00:00 UTC, conditional on the pre-period model/evaluator freeze checklist below. If the compatible model artifact and evaluator are not frozen before the start, move the start to the next 00:00 UTC boundary and amend this document before inspecting any outcomes.
 **Market:** Delta Exchange India BTCUSD perpetual.
@@ -9,7 +9,7 @@
 
 ## Why this is a new experiment
 
-The initial MTF replay and its 36-case gate ablation are exploratory and already inspected. They are not eligible as confirmatory evidence. The gate ablation found no positive net expectancy or net profit factor above 1. This new prospective period is reserved for a single frozen comparison. No thresholds, entry rules, features, model family, target geometry or cost assumptions may be tuned after the period begins.
+The initial MTF replay and its 36-case gate ablation are exploratory and already inspected. They are not eligible as confirmatory evidence. The gate ablation found no positive net expectancy or net profit factor above 1. This new prospective period is reserved for a single frozen comparison. No thresholds, entry rules, features, model family, target-geometry policy or cost assumptions may be tuned after the period begins. See `AMENDMENT_TARGET_GEOMETRY_ADAPTATION.md` for the bounded candidate grid and selection safeguards.
 
 The MTF layer remains separate from the statistical predictive engine. The objective is not to rescue a negative structure backtest by repeatedly changing rules; it is to test whether independently generated evidence improves decisions when combined.
 
@@ -21,11 +21,11 @@ Evaluate three arms on the same completed 5-minute decision timestamps:
 2. **Structure-only:** the original frozen MTF candidate from the 4h + 1h directional gate, 15m setup context and 5m entry module. No changes to pivots, EMA, lookback, entry definitions or module priority. If multiple modules conflict in direction on one timestamp, the structure decision is FLAT.
 3. **Combined:** take a directional decision only when prediction-only and structure-only agree on the same timestamp. Disagreement, missing prediction, missing structure or a neutral output is FLAT. No weighted score or learned ensemble is permitted in this first comparison.
 
-All arms are sampled on the identical 5-minute decision grid. Prediction-only must be sampled at the same timestamps as the structure decision; it must not receive extra opportunities from its native 1-minute cadence. **Important implementation prerequisite:** the current repeated walk-forward script evaluates symmetric barrier labels and does not yet emit a frozen model for the asymmetric 1x-stop / 3x-target labels. Before the prospective window opens, implement and test that exact target/model path, train only on pre-period data, select its threshold only on a pre-period validation block, then freeze the model artifact and hash. Do not substitute a symmetric-label model or a model trained on any prospective rows.
+All arms are sampled on the identical 5-minute decision grid. Prediction-only must be sampled at the same timestamps as the structure decision; it must not receive extra opportunities from its native 1-minute cadence. **Important implementation prerequisite:** the current repeated walk-forward script evaluates symmetric barrier labels and does not yet emit a frozen predictive model compatible with the geometry research. Before the prospective window opens, implement and test a model path that estimates directional/event probabilities independently of any one compulsory 1R/3R geometry, evaluate the bounded geometry grid on chronological pre-period train/validation data with a 3-hour purge/embargo, select one fixed or regime-conditioned policy on validation only, then freeze the model artifact, geometry mapping and hashes. Do not select geometry or thresholds on prospective rows.
 
 ## Targets and execution comparability
 
-- Primary horizon: 1 hour. Secondary horizon: 3 hours. The exact 1x horizon-aligned realized-volatility stop / 3x target event definitions in `PREREGISTERED_ASYMMETRIC_EXPERIMENT.md` remain unchanged.
+- Primary horizon: 1 hour. Secondary horizon: 3 hours. The original 1x-stop / 3x-target configuration remains a benchmark, not a compulsory geometry. The single geometry policy used for the primary comparison must be selected from the bounded candidate set using pre-period validation only, under `AMENDMENT_TARGET_GEOMETRY_ADAPTATION.md`.
 - All three arms use identical target geometry, signal-close reference, next-1m-open entry convention, direction handling and position sizing. This experiment isolates decision selection, not differences between stop-placement styles.
 - At most one active position per arm and horizon. Ignore new signals while that arm/horizon position is open. No pyramiding or overlapping exposure within an arm.
 - If target and stop are touched in the same 1m candle, classify as ambiguous and exclude from directional outcome scoring; do not infer intraminute order.
@@ -65,8 +65,8 @@ The primary comparison is whether combined improves net expectancy and drawdown 
 ## Pre-period freeze checklist
 
 Before 2026-11-04 00:00 UTC:
-- [ ] Implement the predictive model path for the exact preregistered asymmetric 1x-stop / 3x-target labels; the current walk-forward script is not yet compatible.
-- [ ] Verify the prediction model artifact, training cutoff, feature schema and validation threshold.
+- [ ] Implement a predictive model path compatible with the bounded geometry research; do not hard-code 1x/3x as the only eligible policy.
+- [ ] Verify the prediction model artifact, training cutoff, feature schema, validation threshold and frozen geometry/regime mapping.
 - [ ] Verify the frozen MTF engine commit and its point-in-time tests.
 - [ ] Verify the common 5-minute timestamp join and no-lookahead tests.
 - [ ] Verify funding cashflow convention or explicitly mark funding as unresolved.
