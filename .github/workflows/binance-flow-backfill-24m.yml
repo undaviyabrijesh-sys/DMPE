@@ -73,7 +73,7 @@ jobs:
 
       - name: Build minute flow features
         run: |
-          MONTH_PADDED=$(printf '%02d' "$ARCHIVE_MONTH")
+          MONTH_PADDED=$(printf '%02d' "$((10#$ARCHIVE_MONTH))")
           python scripts/build_binance_flow_features.py \
             --archive "binance_input/BTCUSDT-aggTrades-$ARCHIVE_YEAR-$MONTH_PADDED.zip" \
             --year "$ARCHIVE_YEAR" \
