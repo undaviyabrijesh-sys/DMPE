@@ -1,5 +1,33 @@
 # DMPE project status
 
+## Milestone 9 — Frozen symmetric-label historical holdout
+- [x] Froze one candidate from the train/validation screen: 3h, 1.00x trailing 180m RV, balanced HistGradientBoosting.
+- [x] Evaluated once on the previously reserved final 15% historical block (1,017 observations; 2026-01-23 15:00 to 2026-05-30 15:00 UTC).
+- [x] Candidate balanced accuracy 0.4190 vs prior-only 0.3333; macro-F1 0.4136 vs 0.2113; log loss 1.0241 vs 1.0623; Brier 0.6172 vs 0.6412.
+- [x] Paired 1,000-resample UTC-day block bootstrap: balanced-accuracy difference 95% CI [+5.85pp, +11.55pp]; macro-F1 difference CI [+17.08pp, +23.44pp].
+- [x] Added frozen protocol, evaluator, tests, workflow and results report.
+- Decision: positive historical classification result only. This is not prospective validation, net P&L, execution-cost validation, or trading approval.
+- Results: [research/SYMMETRIC_LABEL_HOLDOUT_RESULTS.md](research/SYMMETRIC_LABEL_HOLDOUT_RESULTS.md).
+- [ ] Freeze a separate prospective protocol before 2026-11-04 00:00 UTC, including calibration, thresholds, fees/GST, spread, slippage, funding, entry/fill assumptions, overlap limits, risk controls and evaluator hash.
+
+## Milestone 8 — Symmetric-label predictability screen
+- [x] Compared prior-only, logistic regression and HistGradientBoosting, unweighted and balanced, across 1h/3h and five symmetric RV barrier multiples.
+- [x] Restricted model fitting and validation to pre-test signal timestamps; final 15% reserved and unscored; no historical test scores generated.
+- [x] Selected the 3h/1.00x RV balanced HistGradientBoosting candidate for a one-time reserved-block check based on validation metrics; selection bias acknowledged.
+- [x] Full tests passed; screening workflow run 41590214109 succeeded.
+- Protocol: [research/SYMMETRIC_LABEL_PREDICTABILITY_SCREEN.md](research/SYMMETRIC_LABEL_PREDICTABILITY_SCREEN.md).
+
+## Milestone 7 — Event-label balance diagnostic
+- [x] Added a separate exploratory first-touch label-distribution experiment for 1h and 3h horizons across a predeclared 0.50x/0.75x/1.00x/1.50x/2.00x horizon-RV grid.
+- [x] Preserved ambiguous same-minute touches and incomplete/gapped windows as distinct diagnostic states.
+- [x] Sampled one UTC-aligned observation per horizon and added chronological 70/15/15 summaries with boundary purges.
+- [x] Focused tests and reproducible GitHub Actions workflow passed (run 41589150778).
+- [x] Reviewed the distribution report; symmetric labels materially reduce the extreme neutral-class concentration without changing the frozen asymmetric labels.
+- Decision guardrail: label distribution is not predictive edge and is not a profitable barrier selection.
+- Protocol: [research/EVENT_LABEL_BALANCE_DIAGNOSTIC.md](research/EVENT_LABEL_BALANCE_DIAGNOSTIC.md).
+
+
+
 ## Milestone 7 — Event-label balance diagnostic
 - [x] Added a separate exploratory first-touch label-distribution experiment for 1h and 3h horizons across a predeclared 0.50x/0.75x/1.00x/1.50x/2.00x horizon-RV grid.
 - [x] Preserved ambiguous same-minute touches and incomplete/gapped windows as distinct diagnostic states.
