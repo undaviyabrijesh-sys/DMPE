@@ -3,7 +3,7 @@
 **Status:** Exploratory screening only; no confirmatory strategy or deployment status.  
 **Market:** BTCUSD perpetual research series.  
 **Feature artifact:** Stage 1 run 41509621537.  
-**Signal-time cutoff:** 2026-05-30 18:00 UTC.  
+**Signal-time cutoffs:** 1h through 2026-05-30 18:00 UTC; 3h through 2026-05-30 15:00 UTC.  
 **Execution:** No orders, no P&L replay, no paper/live promotion.
 
 ## Motivation
@@ -27,7 +27,7 @@ The grid is descriptive and exploratory. It is not a search for a profitable sto
 - Reuse the frozen Stage 1 BTCUSD 1-minute feature artifact and its declared feature columns.
 - Features must be available at the completed signal-candle close; future target/excursion columns are never inputs.
 - Labels use only future OHLC bars after the signal close.
-- Use signal timestamps no later than 2026-05-30 18:00 UTC. The last 15% of the pre-cutoff sample is reserved and unscored.
+- Use horizon-specific signal cutoffs: 1h no later than 2026-05-30 18:00 UTC; 3h no later than 2026-05-30 15:00 UTC. Retain only the additional future bars required to resolve labels at or before those cutoffs. The last 15% of each pre-cutoff sample is reserved and unscored.
 - Chronological train/validation partition: first 70% train, next 15% validation, final 15% reserved. Purge one full horizon on both sides of the train/validation boundary.
 - No historical test metrics are generated. In particular, data after the cutoff through 2026-11-02 are not used for model fitting, barrier selection or performance evaluation in this screen.
 - The previously declared prospective window is not accessed. Because this is a new exploratory hypothesis, any later forward confirmation must be frozen separately before its start.
