@@ -188,6 +188,9 @@ def main() -> None:
     trades_all.to_csv(out / "mtf_gate_ablation_trades.csv", index=False)
 
     time_diff = prices["time"].diff().dropna()
+    gap_durations = time_diff[time_diff > pd.Timedelta(minutes=1)]
+    missing_minutes = int(((gap_durations / pd.Timedelta(minutes=1)).round().astype("int64") - 1).sum())
+    max_missing_run = int((gap_durations.max() / pd.Timedelta(minutes=1)) - 1) if not gap_durations.empty else 0
     report = {
         "purpose": (
             "Post-hoc diagnostic ablation of the already-evaluated MTF gate. "
@@ -197,7 +200,9 @@ def main() -> None:
         "rows_1m": int(len(prices)),
         "price_first_utc": prices["time"].min().isoformat(),
         "price_last_utc": prices["time"].max().isoformat(),
-        "missing_minute_intervals": int((time_diff > pd.Timedelta(minutes=1)).sum()),
+        "missing_minute_intervals": missing_minutes,
+        "data_gap_events": int(len(gap_durations)),
+        "max_missing_run_minutes": max_missing_run,
         "candidate_rows_5m": int(len(candidates)),
         "gate_modes": {
             "4h1h15m": "Original frozen directional gate: 4h and 1h must agree; 15m bias must agree where specified by each module.",
