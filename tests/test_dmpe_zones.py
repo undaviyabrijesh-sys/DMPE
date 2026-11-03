@@ -65,4 +65,4 @@ def test_swing_high_uses_full_candle_range_and_waits_for_confirmation():
     assert swing[0]["high"] == 108.0
     assert swing[0]["origin_time"] == rows[10]["time"]
     assert swing[0]["created_at"] == rows[13]["time"]
-    assert swing[0]["origin_index"] == 13
+    assert swing[0]["origin_index"] == 10
