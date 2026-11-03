@@ -1,8 +1,15 @@
+import sys
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
 
-from diagnose_event_label_balance import (
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "scripts"))
+
+from diagnose_event_label_balance import (  # noqa: E402
     chronological_partition_masks,
     evaluate_event_grid,
     summarize_state_counts,
