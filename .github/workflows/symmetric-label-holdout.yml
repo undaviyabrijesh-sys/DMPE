@@ -1,0 +1,48 @@
+name: DMPE frozen candidate check
+
+on:
+  push:
+    paths:
+      - ".github/workflows/symmetric-label-holdout.yml"
+      - "scripts/evaluate_symmetric_label_holdout.py"
+      - "tests/test_symmetric_label_holdout.py"
+  pull_request:
+    paths:
+      - ".github/workflows/symmetric-label-holdout.yml"
+      - "scripts/evaluate_symmetric_label_holdout.py"
+      - "tests/test_symmetric_label_holdout.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+      - run: pytest -q tests/test_symmetric_label_holdout.py tests/test_labels.py
+      - uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 41509621537
+          name: dmpe-stage1-feature-engineering
+          path: stage1_input
+      - run: |
+          python scripts/evaluate_symmetric_label_holdout.py \
+            --feature-file stage1_input/processed/dmpe_BTCUSD_1m_features.parquet \
+            --schema-file stage1_input/processed/feature_schema.json \
+            --output-dir symmetric_label_holdout
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dmpe-symmetric-label-holdout-${{ github.run_id }}
+          path: symmetric_label_holdout
+          if-no-files-found: error
+          retention-days: 30
