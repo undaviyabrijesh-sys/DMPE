@@ -10,11 +10,14 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import sys
 
 import numpy as np
 import pandas as pd
 
-from dmpe.labels import add_barrier_labels
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+from dmpe.labels import add_barrier_labels  # noqa: E402
 
 HORIZONS = {"1h": 60, "3h": 180}
 MULTIPLIERS = (0.5, 0.75, 1.0, 1.5, 2.0)
