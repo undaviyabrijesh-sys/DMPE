@@ -99,29 +99,82 @@ def detect_structure_zones(
             "created_at": base["time"],
             "origin_index": base_idx,
             "strength": round(float(strength), 2),
+            "origin_type": "BASE_LEG",
+            "origin_time": base["time"],
         })
 
-    # Merge only genuinely overlapping same-side bases. Do not combine nearby
-    # but distinct structural levels into a single broad band.
+    # Add confirmed swing-origin zones. The complete high-low range of the
+    # pivot candle is the zone. A pivot is actionable only after three right-
+    # hand candles close and price has displaced away from the origin.
+    left_right = 3
+    for pivot in range(left_right, len(frame) - left_right):
+        pivot_row = frame.iloc[pivot]
+        local = frame.iloc[pivot - left_right:pivot + left_right + 1]
+        pivot_atr = frame.at[pivot, "atr"]
+        if pd.isna(pivot_atr) or float(pivot_atr) <= 0:
+            continue
+        pivot_high, pivot_low = float(pivot_row["high"]), float(pivot_row["low"])
+        is_swing_high = pivot_high >= float(local["high"].max())
+        is_swing_low = pivot_low <= float(local["low"].min())
+        confirm_index = pivot + left_right
+        after = frame.iloc[pivot + 1:confirm_index + 1]
+        if after.empty:
+            continue
+        confirm_time = frame.at[confirm_index, "time"]
+        origin_time = pivot_row["time"]
+
+        if is_swing_high:
+            departure = pivot_low - float(after["close"].min())
+            if departure >= 1.5 * float(pivot_atr):
+                raw.append({
+                    "kind": "SUPPLY", "low": pivot_low, "high": pivot_high,
+                    "created_at": confirm_time, "origin_time": origin_time,
+                    "origin_index": confirm_index,
+                    "strength": round(min(4.0, departure / float(pivot_atr)), 2),
+                    "origin_type": "SWING_HIGH",
+                })
+        if is_swing_low:
+            departure = float(after["close"].max()) - pivot_high
+            if departure >= 1.5 * float(pivot_atr):
+                raw.append({
+                    "kind": "DEMAND", "low": pivot_low, "high": pivot_high,
+                    "created_at": confirm_time, "origin_time": origin_time,
+                    "origin_index": confirm_index,
+                    "strength": round(min(4.0, departure / float(pivot_atr)), 2),
+                    "origin_type": "SWING_LOW",
+                })
+
+    # Keep one representative zone per structure cluster. Major swing origins
+    # outrank nearby minor bases; preserve the selected candle's exact bounds.
+    typical_range = float((frame["high"] - frame["low"]).tail(20).median())
     merged: list[dict[str, Any]] = []
-    for zone in sorted(raw, key=lambda z: z["origin_index"]):
-        match = None
+    ranked = sorted(
+        raw,
+        key=lambda z: (1 if str(z.get("origin_type", "")).startswith("SWING_") else 0,
+                       float(z["strength"])),
+        reverse=True,
+    )
+    for zone in ranked:
+        z_mid = (float(zone["low"]) + float(zone["high"])) / 2.0
+        is_swing = str(zone.get("origin_type", "")).startswith("SWING_")
+        duplicate = False
         for existing in merged:
             if existing["kind"] != zone["kind"]:
                 continue
             overlap = max(0.0, min(existing["high"], zone["high"]) - max(existing["low"], zone["low"]))
-            smaller = min(existing["high"] - existing["low"], zone["high"] - zone["low"])
-            if smaller > 0 and overlap / smaller >= 0.60:
-                match = existing
+            smaller = max(1e-12, min(existing["high"] - existing["low"], zone["high"] - zone["low"]))
+            overlap_ratio = overlap / smaller
+            e_mid = (float(existing["low"]) + float(existing["high"])) / 2.0
+            kept_swing = str(existing.get("origin_type", "")).startswith("SWING_")
+            near_major = (
+                (is_swing != kept_swing and abs(z_mid - e_mid) <= typical_range * 0.90)
+                or (is_swing and kept_swing and abs(z_mid - e_mid) <= typical_range * 0.45)
+            )
+            if overlap_ratio >= 0.60 or near_major:
+                duplicate = True
                 break
-        if match is None:
+        if not duplicate:
             merged.append(zone.copy())
-        else:
-            match["low"] = min(match["low"], zone["low"])
-            match["high"] = max(match["high"], zone["high"])
-            match["strength"] = max(match["strength"], zone["strength"])
-            match["created_at"] = min(match["created_at"], zone["created_at"])
-            match["origin_index"] = min(match["origin_index"], zone["origin_index"])
 
     last_close = float(frame["close"].iloc[-1])
     last_time = frame["time"].iloc[-1]
