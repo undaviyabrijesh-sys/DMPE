@@ -212,3 +212,131 @@ def build_regime_observations(log_returns: pd.Series | np.ndarray, window: int =
     trailing_vol = pd.Series(returns).rolling(window, min_periods=window).std(ddof=0).to_numpy()
     safe_vol = np.maximum(trailing_vol, 1e-12)
     return np.column_stack([returns, np.log(safe_vol)])
+
+
+class KalmanTrendFilter:
+    """Causal local-linear-trend Kalman filter for log-price observations.
+
+    Noise scales are estimated from the training slice only. filter() can then
+    continue from the stored training posterior on later observations.
+    """
+
+    def fit(self, training_log_prices: np.ndarray) -> "KalmanTrendFilter":
+        y = np.asarray(training_log_prices, dtype=float).reshape(-1)
+        if y.size < 100 or not np.isfinite(y).all():
+            raise ValueError("At least 100 finite training log-prices are required.")
+        dy = np.diff(y)
+        ddy = np.diff(dy)
+        self.observation_variance_ = max(float(np.var(dy)) * 0.05, 1e-12)
+        self.process_variance_ = max(float(np.var(ddy)) * 0.05, 1e-14)
+        self.transition_ = np.array([[1.0, 1.0], [0.0, 1.0]])
+        self.observation_ = np.array([[1.0, 0.0]])
+        q = self.process_variance_
+        self.process_covariance_ = q * np.array([[1.0 / 3.0, 0.5], [0.5, 1.0]])
+        state = np.array([y[0], 0.0])
+        covariance = np.eye(2) * max(float(np.var(y)), 1e-8)
+        for value in y[1:]:
+            state, covariance = self._step(value, state, covariance)
+        self.state_ = state
+        self.covariance_ = covariance
+        self.fitted = True
+        return self
+
+    def _step(self, value: float, state: np.ndarray, covariance: np.ndarray):
+        f, h, q = self.transition_, self.observation_, self.process_covariance_
+        predicted_state = f @ state
+        predicted_cov = f @ covariance @ f.T + q
+        innovation = float(value - (h @ predicted_state)[0])
+        innovation_var = float((h @ predicted_cov @ h.T)[0, 0] + self.observation_variance_)
+        gain = (predicted_cov @ h.T) / innovation_var
+        updated_state = predicted_state + gain[:, 0] * innovation
+        identity = np.eye(2)
+        # Joseph form is numerically safer than (I-KH)P.
+        kh = identity - gain @ h
+        updated_cov = kh @ predicted_cov @ kh.T + (
+            gain * self.observation_variance_) @ gain.T
+        return updated_state, updated_cov
+
+    def filter(self, log_prices: np.ndarray) -> np.ndarray:
+        """Return filtered [level, slope] after each new observation."""
+        if not getattr(self, "fitted", False):
+            raise RuntimeError("Fit Kalman filter on training data first.")
+        y = np.asarray(log_prices, dtype=float).reshape(-1)
+        if not np.isfinite(y).all():
+            raise ValueError("Kalman observations must be finite.")
+        state, covariance = self.state_.copy(), self.covariance_.copy()
+        out = np.empty((len(y), 2), dtype=float)
+        for i, value in enumerate(y):
+            state, covariance = self._step(float(value), state, covariance)
+            out[i] = state
+        return out
+
+
+def bayesian_odds_update(prior_probability: float, likelihood_ratios: np.ndarray) -> np.ndarray:
+    """Sequential Bayes updates from calibrated evidence likelihood ratios.
+
+    Each LR is P(evidence | event) / P(evidence | no event), estimated on
+    training/validation data only. This function does not learn LRs.
+    """
+    if not 0.0 < prior_probability < 1.0:
+        raise ValueError("Prior probability must be strictly between zero and one.")
+    ratios = np.asarray(likelihood_ratios, dtype=float).reshape(-1)
+    if not np.isfinite(ratios).all() or (ratios <= 0).any():
+        raise ValueError("Likelihood ratios must be finite and strictly positive.")
+    log_odds = np.log(prior_probability / (1.0 - prior_probability))
+    result = np.empty(ratios.size, dtype=float)
+    for i, ratio in enumerate(ratios):
+        log_odds += np.log(ratio)
+        # Numerical guard only; it does not alter ordinary posterior values.
+        bounded = np.clip(log_odds, -35.0, 35.0)
+        result[i] = 1.0 / (1.0 + np.exp(-bounded))
+    return result
+
+
+def monte_carlo_barrier_probabilities(
+    past_returns: np.ndarray,
+    stop_pct: float,
+    target_pct: float,
+    horizon: int,
+    n_paths: int = 5000,
+    block_size: int = 1,
+    seed: int = 7,
+) -> dict[str, float]:
+    """Bootstrap future paths from past returns and estimate first-touch rates.
+
+    This is an empirical bootstrap baseline, not a claim that returns are iid.
+    Block sampling preserves short-range dependence when block_size > 1.
+    """
+    history = np.asarray(past_returns, dtype=float).reshape(-1)
+    if history.size < max(100, block_size * 10) or not np.isfinite(history).all():
+        raise ValueError("Insufficient finite past returns for Monte Carlo.")
+    if stop_pct <= 0 or target_pct <= 0 or horizon < 1 or n_paths < 100 or block_size < 1:
+        raise ValueError("Invalid barrier or simulation configuration.")
+    rng = np.random.default_rng(seed)
+    n_blocks = int(np.ceil(horizon / block_size))
+    starts = rng.integers(0, history.size - block_size + 1, size=(n_paths, n_blocks))
+    sampled = np.concatenate(
+        [history[starts[:, j, None] + np.arange(block_size)] for j in range(n_blocks)],
+        axis=1
+    )[:, :horizon]
+    paths = np.expm1(np.cumsum(sampled, axis=1))
+    hit_target = paths >= target_pct / 100.0
+    hit_stop = paths <= -stop_pct / 100.0
+    target_first = np.zeros(n_paths, dtype=bool)
+    stop_first = np.zeros(n_paths, dtype=bool)
+    for i in range(n_paths):
+        t_idx = np.flatnonzero(hit_target[i])
+        s_idx = np.flatnonzero(hit_stop[i])
+        t = int(t_idx[0]) if t_idx.size else horizon + 1
+        s = int(s_idx[0]) if s_idx.size else horizon + 1
+        target_first[i] = t < s
+        stop_first[i] = s < t
+    return {
+        "target_first_probability": float(target_first.mean()),
+        "stop_first_probability": float(stop_first.mean()),
+        "no_touch_probability": float((~target_first & ~stop_first).mean()),
+        "mean_terminal_return_pct": float(np.expm1(sampled.sum(axis=1)).mean() * 100.0),
+        "paths": int(n_paths),
+        "horizon": int(horizon),
+        "block_size": int(block_size),
+    }
