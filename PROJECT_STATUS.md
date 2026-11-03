@@ -180,3 +180,17 @@ The Binance archive can accelerate historical trade-flow research, but it does n
 - [x] Added a 24-month matrix backfill for 2024-11 through 2026-10 with six monthly jobs in parallel and a final strict continuity check. Monthly ZIPs are removed after processing in this bulk workflow; checksums and source URLs are retained. The one-month workflow retains a raw archive artifact when needed.
 - [ ] Wait for the 24-month matrix and combine job to complete; verify exactly 24 monthly manifests and 1,051,200 minute-close rows before merging to candle features.
 - [ ] The final 24-month flow artifact is a Binance proxy dataset, not Delta history. Keep it distinct from the Delta live feed in all model and execution reports.
+
+
+## Quantitative regime research — initial implementation (2026-11-03)
+
+- [x] Added a constrained Gaussian-QMLE GARCH(1,1) estimator with stationarity guard (alpha + beta < 0.999) and causal next-period variance recursion.
+- [x] Added a diagonal-Gaussian HMM with training-only feature scaling, train-only parameter estimation, low-to-high volatility state ordering and forward-filtered probabilities. No backward smoothing is used for decision-time state estimates.
+- [x] Added past-only trailing realized-volatility observations for regime estimation.
+- [x] Added synthetic tests for positive/stationary GARCH forecasts, causal forecasts, normalized HMM probabilities, future-perturbation invariance and unfitted-model protection.
+- [ ] Verify the new test workflow passes on GitHub Actions before accepting the implementation.
+- [ ] Run GARCH and HMM as independent research features on chronological train/validation/test partitions; compare against existing DMPE baselines and simple rolling-volatility/regime baselines.
+- [ ] Test robustness to gaps, heavy tails, regime-count choices and parameter instability; fit all scalers and model parameters on training data only.
+- [ ] Do not promote these estimates to trade signals until they improve net-of-cost out-of-sample expectancy and uncertainty versus the existing baseline. No execution enabled.
+
+These modules are research components, not yet integrated into the production feature pipeline or the decision engine. GARCH forecasts volatility, not direction; HMM states are latent statistical clusters, not guaranteed economic regimes. The next models (Kalman, Bayesian updating and Monte Carlo) remain planned, not implemented.
