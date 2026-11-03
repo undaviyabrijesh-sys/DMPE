@@ -84,7 +84,7 @@ def _profit_factor(pnl: pd.Series) -> float | None:
     gains = float(pnl[pnl > 0].sum())
     losses = float(-pnl[pnl < 0].sum())
     if losses == 0:
-        return None if gains == 0 else float("inf")
+        return None
     return gains / losses
 
 
