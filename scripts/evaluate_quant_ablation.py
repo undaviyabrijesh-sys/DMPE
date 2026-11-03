@@ -54,6 +54,33 @@ def build_complete_5m_bars(frame: pd.DataFrame) -> pd.DataFrame:
     return bars.reset_index(names="time")
 
 
+def add_directional_event_labels(frame: pd.DataFrame, horizon: str) -> pd.DataFrame:
+    """Combine independent long/short 1R-stop/3R-target events into a direction class.
+
+    +1 = long target first and short target did not also win.
+    -1 = short target first and long target did not also win.
+     0 = neither side's target won.
+    Conflicting target wins, same-minute ambiguities and incomplete outcomes are excluded.
+    """
+    tag = "sl1_tp3rv"
+    long_label = pd.to_numeric(frame[f"asym_long_label_{horizon}_{tag}"], errors="coerce")
+    short_label = pd.to_numeric(frame[f"asym_short_label_{horizon}_{tag}"], errors="coerce")
+    long_state = pd.to_numeric(frame[f"asym_long_state_{horizon}_{tag}"], errors="coerce")
+    short_state = pd.to_numeric(frame[f"asym_short_state_{horizon}_{tag}"], errors="coerce")
+    valid = long_state.isin([-1, 0, 1]) & short_state.isin([-1, 0, 1])
+    long_win = long_label.eq(1)
+    short_win = short_label.eq(1)
+    conflict = long_win & short_win
+    direction = np.where(long_win & ~short_win, 1,
+                np.where(short_win & ~long_win, -1, 0)).astype("int8")
+    label_col = f"barrier_label_{horizon}_1rv"
+    state_col = f"barrier_state_{horizon}_1rv"
+    out = frame.copy()
+    out[label_col] = pd.Series(direction, index=out.index).where(valid & ~conflict, np.nan)
+    out[state_col] = np.where(valid & ~conflict, direction, -2).astype("int8")
+    return out
+
+
 def make_sample(frame: pd.DataFrame, horizon: str) -> pd.DataFrame:
     minutes = HORIZONS[horizon]
     label = f"barrier_label_{horizon}_1rv"
@@ -166,10 +193,16 @@ def main() -> None:
     base_features = list(dict.fromkeys(schema.get("feature_columns", [])))
     required = ["time", "close", *base_features]
     for horizon in HORIZONS:
-        required += [f"barrier_label_{horizon}_1rv", f"barrier_state_{horizon}_1rv"]
+        for direction in ("long", "short"):
+            required += [
+                f"asym_{direction}_label_{horizon}_sl1_tp3rv",
+                f"asym_{direction}_state_{horizon}_sl1_tp3rv",
+            ]
     frame = pd.read_parquet(feature_path, columns=list(dict.fromkeys(required)))
     frame["time"] = pd.to_datetime(frame["time"], utc=True)
     frame = frame.sort_values("time").reset_index(drop=True)
+    for horizon in HORIZONS:
+        frame = add_directional_event_labels(frame, horizon)
 
     bars = build_complete_5m_bars(frame)
     output = Path(args.output_dir)
@@ -208,6 +241,11 @@ def main() -> None:
 
     payload = {
         "created_at_utc": pd.Timestamp.now(tz="UTC").isoformat(),
+        "label_construction": (
+            "For each horizon, +1 means the long 3R target was first and the short target was not also first; "
+            "-1 means the short 3R target was first and the long target was not also first; "
+            "0 means neither directional target was first. Conflicts, same-minute ambiguity and incomplete rows are excluded."
+        ),
         "purpose": (
             "Exploratory chronological feature ablation. This is not a net-PnL test "
             "and does not approve trading. A promising variant must pass the separate "
@@ -220,7 +258,8 @@ def main() -> None:
             "GARCH recursion and HMM probabilities are causal and reset after data gaps.",
             "HMM uses forward filtering, never backward smoothing.",
             "Existing baseline train/validation/test splits, purging and validation-only thresholds are reused.",
-            "Only fixed 1.0x symmetric 1h/3h labels are used as a diagnostic reference.",
+            "Directional labels are derived from the existing separate 1h/3h asymmetric 1R-stop/3R-target event labels: long target-first=+1, short target-first=-1, neither target-first=0.",
+            "Conflicting long-and-short target wins, same-minute ambiguity and incomplete outcomes are excluded.",
             "No prospective comparison-period outcomes are used.",
         ],
         "model_fits": feature_reports,
