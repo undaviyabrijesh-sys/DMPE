@@ -36,7 +36,7 @@ HORIZONS = {"1h": 60, "3h": 180}
 MULTIPLIERS = (0.5, 0.75, 1.0, 1.5, 2.0)
 VOL_COLUMNS = {"1h": "realized_vol_60m_pct", "3h": "realized_vol_180m_pct"}
 CLASSES = np.array([-1, 0, 1], dtype="int8")
-SIGNAL_CUTOFF = pd.Timestamp("2026-05-30T18:00:00Z")
+SIGNAL_CUTOFFS = {\n    "1h": pd.Timestamp("2026-05-30T18:00:00Z"),\n    "3h": pd.Timestamp("2026-05-30T15:00:00Z"),\n}
 
 
 def chronological_train_validation(
@@ -251,7 +251,7 @@ def main() -> None:
     print(json.dumps({
         "output_dir": str(output),
         "variants": len(report["results"]),
-        "validation_cutoff": report["signal_time_cutoff_utc"],
+        "signal_time_cutoffs": report["signal_time_cutoffs_utc"],
         "trading_approval": False,
     }, indent=2))
 
