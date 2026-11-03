@@ -531,6 +531,7 @@ def main() -> None:
         top[3].metric("1h return", fmt_pct(metrics["return_1h"]))
         top[4].metric("3h return", fmt_pct(metrics["return_3h"]))
         zones = detect_structure_zones(candles)
+        st.caption("STRUCTURE ENGINE · BASE/LEG + CONFIRMED SWING ORIGINS · FVG DISABLED")
         chart = build_price_chart(candles, chart_bars, zones)
         st.plotly_chart(chart, use_container_width=True,
                         config={"displaylogo": False, "scrollZoom": True})
