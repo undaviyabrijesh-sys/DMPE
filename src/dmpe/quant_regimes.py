@@ -41,7 +41,7 @@ def _decode_garch(theta: np.ndarray) -> tuple[float, float, float]:
 
 
 def fit_garch11(train_returns: pd.Series | np.ndarray) -> GARCHFit:
-    """Fit Gaussian-QMLE GARCH(1,1), constraining alpha + beta < 0.999."""
+    """Fit correctly lagged Gaussian-QMLE GARCH(1,1); constrain alpha + beta < 0.999."""
     raw = _returns_array(train_returns)
     mean = float(raw.mean())
     centered = raw - mean
@@ -50,11 +50,15 @@ def fit_garch11(train_returns: pd.Series | np.ndarray) -> GARCHFit:
 
     def objective(theta: np.ndarray) -> float:
         omega, alpha, beta = _decode_garch(theta)
+        # h_t must be determined only by information through t-1.
+        # Score eps[0] with the training variance, then update h for eps[1].
         h = variance
-        total = 0.0
-        for eps in centered:
-            h = max(omega + alpha * eps * eps + beta * h, 1e-12)
+        total = np.log(h) + (centered[0] * centered[0]) / h
+        previous_eps = centered[0]
+        for eps in centered[1:]:
+            h = max(omega + alpha * previous_eps * previous_eps + beta * h, 1e-12)
             total += np.log(h) + (eps * eps) / h
+            previous_eps = eps
         return 0.5 * total
 
     result = minimize(objective, initial, method="L-BFGS-B",
