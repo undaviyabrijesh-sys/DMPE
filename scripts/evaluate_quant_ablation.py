@@ -2,7 +2,8 @@
 
 This is a predictive-screening experiment, not a profitability claim. It reuses
 the existing train/validation/test split and validation-only signal threshold.
-Only the fixed 1.0x symmetric 1h/3h barrier labels are used as a common benchmark.
+Directional classes are derived from the frozen separate long/short 1R-stop /
+3R-target event labels for the 1h and 3h horizons.
 """
 from __future__ import annotations
 
@@ -30,18 +31,18 @@ def build_complete_5m_bars(frame: pd.DataFrame) -> pd.DataFrame:
     work["close"] = pd.to_numeric(work["close"], errors="coerce")
     work = work.dropna().sort_values("time").drop_duplicates("time")
     indexed = work.set_index("time")
-    bars = indexed["close"].resample("5min", closed="right", label="right").agg(
-        close="last", count="count"
-    )
-    # Explicitly verify all five minute closes are present and contiguous.
-    complete = pd.Series(False, index=bars.index)
     grouped = indexed["close"].resample("5min", closed="right", label="right")
-    for stamp, values in grouped:
-        if len(values) == 5:
-            idx = values.index
-            if idx[0] == stamp - pd.Timedelta(minutes=4) and idx[-1] == stamp:
-                if (idx.to_series().diff().dropna() == pd.Timedelta(minutes=1)).all():
-                    complete.loc[stamp] = True
+    bars = grouped.agg(close="last", count="count")
+    timestamps = pd.Series(indexed.index, index=indexed.index)
+    first_time = timestamps.resample("5min", closed="right", label="right").first()
+    last_time = timestamps.resample("5min", closed="right", label="right").last()
+    # Five unique observations spanning the exact four-minute interval imply
+    # all five one-minute closes are present; partial/gapped buckets are rejected.
+    complete = (
+        bars["count"].eq(5)
+        & first_time.eq(bars.index - pd.Timedelta(minutes=4))
+        & last_time.eq(bars.index)
+    )
     bars = bars.loc[complete, ["close"]].copy()
     bars["log_return"] = np.log(bars["close"]).diff()
     time_step = bars.index.to_series().diff()
@@ -254,8 +255,8 @@ def main() -> None:
         "data_file": str(feature_path),
         "decision_timeframe": "5m completed-bar regime features merged backward with 5m tolerance",
         "training_policy": [
-            "GARCH and HMM parameters are fitted only before each horizon's training cutoff.",
-            "GARCH recursion and HMM probabilities are causal and reset after data gaps.",
+            "GARCH and HMM parameters are fitted only before each horizon's training cutoff, using the largest contiguous training segment.",
+            "GARCH recursion and HMM probabilities are forward-filtered and reset after data gaps; parameter-fit features are exploratory and must be cross-fitted before confirmation.",
             "HMM uses forward filtering, never backward smoothing.",
             "Existing baseline train/validation/test splits, purging and validation-only thresholds are reused.",
             "Directional labels are derived from the existing separate 1h/3h asymmetric 1R-stop/3R-target event labels: long target-first=+1, short target-first=-1, neither target-first=0.",
