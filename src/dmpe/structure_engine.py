@@ -112,11 +112,13 @@ def _merge_context(base: pd.DataFrame, context: pd.DataFrame, prefix: str) -> pd
         "ema20", "ema50", "structure_break_up", "structure_break_down",
     ]
     right = context[cols].copy().rename(
-        columns={col: f"{prefix}_{col}" for col in cols if col != "available_at"}
+        columns={col: f"{prefix}_{col}" for col in cols}
     )
     return pd.merge_asof(
-        base.sort_values("available_at"), right.sort_values("available_at"),
-        on="available_at", direction="backward",
+        base.sort_values("available_at"),
+        right.sort_values(f"{prefix}_available_at"),
+        left_on="available_at", right_on=f"{prefix}_available_at",
+        direction="backward",
     )
 
 
