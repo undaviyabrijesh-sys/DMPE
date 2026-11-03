@@ -47,4 +47,5 @@ def test_validation_metrics_align_all_three_classes():
 
 
 def test_signal_cutoff_is_before_original_historical_test_window():
-    assert SIGNAL_CUTOFFS["1h"] == pd.Timestamp("2026-05-30T18:00:00Z")\n    assert SIGNAL_CUTOFFS["3h"] == pd.Timestamp("2026-05-30T15:00:00Z")
+    assert SIGNAL_CUTOFFS["1h"] == pd.Timestamp("2026-05-30T18:00:00Z")
+    assert SIGNAL_CUTOFFS["3h"] == pd.Timestamp("2026-05-30T15:00:00Z")
