@@ -208,3 +208,23 @@ python scripts/merge_binance_flow_features.py \
   --flow-file binance_BTCUSDT_aggtrade_flow_1m_2024-11_to_2026-10.parquet \
   --output-dir binance_merged
 ```
+
+
+## Stage 5 — Multi-timeframe structure and entry research
+
+DMPE now has a separate experimental Structure & Entry Engine alongside (not instead of) the predictive engine. It builds completed 5m, 15m, 1h and 4h bars without filling missing candles, exposes swing pivots only after right-side confirmation, derives 4h/1h directional context and 15m setup context, then tests 5m pullback, liquidity-sweep and breakout/retest candidates.
+
+Run **Actions → DMPE multi-timeframe structure evaluation** for the original gated modules, or **Actions → DMPE MTF gate ablation** to compare the original 4h/1h/15m context, 15m-only context and no directional context gate. The scripts are:
+- `scripts/evaluate_structure_engine.py`
+- `scripts/evaluate_structure_gate_ablation.py`
+
+The replay requires an exact next-1m open at the signal availability timestamp. It censors positions crossing missing 1m data and positions still open at end-of-file; censored trades are excluded from performance metrics. It assumes 5.9 bps taker fee and 1 bp slippage per side. Funding, measured spread, market impact and latency are not yet included.
+
+**Current status:** The first historical replay and post-hoc gate ablation are negative after costs. No tested variant passed the net expectancy / profit-factor gate. The structure engine is a research layer only; it is not integrated into production signal logic and does not place orders. The current evidence does not justify loosening HTF filters merely to increase trade frequency. See [the full MTF results and limitations](research/MTF_STRUCTURE_RESULTS.md) and [the ablation protocol](research/MTF_GATE_ABLATION_PROTOCOL.md).
+
+The intended DMPE architecture remains four distinct layers:
+1. Market intelligence.
+2. Predictive engine.
+3. Structure and entry engine.
+4. Decision engine, which may combine only independently validated evidence and can choose FLAT.
+
