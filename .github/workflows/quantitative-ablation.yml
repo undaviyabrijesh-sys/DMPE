@@ -1,0 +1,68 @@
+name: DMPE quantitative regime ablation
+
+on:
+  push:
+    paths:
+      - ".github/workflows/quantitative-ablation.yml"
+      - "scripts/evaluate_quant_ablation.py"
+      - "src/dmpe/quant_regimes.py"
+      - "scripts/evaluate_baselines.py"
+      - "requirements.txt"
+  workflow_dispatch:
+    inputs:
+      feature_run_id:
+        description: "Successful Stage 1 feature-engineering run ID"
+        required: true
+        default: "41509621537"
+        type: string
+      hmm_iterations:
+        description: "Maximum HMM EM iterations"
+        required: true
+        default: "30"
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  quantitative-ablation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Check out DMPE
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Download Stage 1 feature artifact
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: ${{ github.event.inputs.feature_run_id || '41509621537' }}
+          name: dmpe-stage1-feature-engineering
+          path: stage1_input
+
+      - name: Run chronological GARCH and HMM ablation
+        run: |
+          python scripts/evaluate_quant_ablation.py \
+            --feature-file stage1_input/processed/dmpe_BTCUSD_1m_features.parquet \
+            --schema-file stage1_input/processed/feature_schema.json \
+            --output-dir quant_ablation_output \
+            --hmm-iterations "${{ github.event.inputs.hmm_iterations || '30' }}"
+
+      - name: Upload quantitative ablation report
+        uses: actions/upload-artifact@v4
+        with:
+          name: dmpe-quantitative-regime-ablation-${{ github.run_id }}
+          path: quant_ablation_output
+          if-no-files-found: error
+          retention-days: 30
