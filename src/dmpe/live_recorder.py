@@ -48,9 +48,12 @@ class LiveRecorder:
         channels = [
             {"name": "trades", "symbols": [self.symbol]},
             {"name": "ob_l2", "symbols": [self.symbol]},
-            {"name": "candlestick_1m", "symbols": [self.symbol]},
+            {"name": "candlestick_1m", "symbols": [self.symbol, f"MARK:{self.symbol}"]},
             {"name": "ticker", "symbols": [self.symbol]},
             {"name": "mark_price", "symbols": [f"MARK:{self.symbol}"]},
+            # This is the migrated public channel on WS_URL, not the retired
+            # legacy channel on the private socket endpoint.
+            {"name": "funding_rate", "symbols": [self.symbol]},
             # Public operational feeds: use as a hard safety gate for any future
             # execution adapter, not as directional alpha features.
             {"name": "system_status"},
@@ -59,8 +62,7 @@ class LiveRecorder:
         ws.send(json.dumps({"type": "subscribe", "payload": {"channels": channels}}))
         print(
             f"Connected; subscribed to trades, L2, 1m candles, ticker/OI, "
-            f"mark price and exchange status feeds for {self.symbol}. Funding is intentionally "
-            f"not subscribed: the legacy funding_rate channel is deprecated."
+            f"mark/traded candles, funding and exchange status feeds for {self.symbol}."
         )
 
     def on_message(self, ws: websocket.WebSocketApp, message: str) -> None:
