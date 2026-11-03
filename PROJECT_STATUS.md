@@ -1,5 +1,16 @@
 # DMPE project status
 
+## Milestone 7 — Event-label balance diagnostic
+- [x] Added a separate exploratory first-touch label-distribution experiment for 1h and 3h horizons across a predeclared 0.50x/0.75x/1.00x/1.50x/2.00x horizon-RV grid.
+- [x] Preserved ambiguous same-minute touches and incomplete/gapped windows as distinct diagnostic states.
+- [x] Sampled one UTC-aligned observation per horizon and added chronological 70/15/15 summaries with boundary purges.
+- [x] Added focused unit tests, a reproducible GitHub Actions workflow and protocol documentation.
+- [ ] Review the completed diagnostic report before deciding whether to preregister a new event definition.
+- Decision guardrail: this is label-distribution research only. It does not fit models, select a profitable barrier, change confirmatory asymmetric 1R-stop/3R-target labels, inspect the prospective holdout, or approve trading.
+- Protocol: [research/EVENT_LABEL_BALANCE_DIAGNOSTIC.md](research/EVENT_LABEL_BALANCE_DIAGNOSTIC.md).
+
+
+
 ## Milestone 6 — MTF structure & entry research
 - [x] Added completed 5m/15m/1h/4h resampling, confirmed swing structure, 4h/1h context, 15m setup context and 5m pullback/sweep/breakout-retest candidates.
 - [x] Added gap-aware taker-fee/slippage replay; stale entries and trades crossing missing data are excluded/censored.

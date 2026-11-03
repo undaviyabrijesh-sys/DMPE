@@ -1,0 +1,75 @@
+name: DMPE exploratory event-label balance diagnostics
+
+on:
+  push:
+    paths:
+      - ".github/workflows/event-label-diagnostics.yml"
+      - "scripts/diagnose_event_label_balance.py"
+      - "tests/test_event_label_balance.py"
+      - "src/dmpe/labels.py"
+      - "requirements.txt"
+  pull_request:
+    paths:
+      - ".github/workflows/event-label-diagnostics.yml"
+      - "scripts/diagnose_event_label_balance.py"
+      - "tests/test_event_label_balance.py"
+      - "src/dmpe/labels.py"
+      - "requirements.txt"
+  workflow_dispatch:
+    inputs:
+      feature_run_id:
+        description: "Successful Stage 1 feature-engineering run ID"
+        required: true
+        default: "41509621537"
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: dmpe-event-label-diagnostics-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  event-label-diagnostics:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Check out DMPE
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run focused unit tests
+        run: pytest -q tests/test_event_label_balance.py tests/test_labels.py
+
+      - name: Download frozen Stage 1 feature artifact
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: ${{ github.event.inputs.feature_run_id || '41509621537' }}
+          name: dmpe-stage1-feature-engineering
+          path: stage1_input
+
+      - name: Diagnose first-touch event-label balance
+        run: |
+          python scripts/diagnose_event_label_balance.py \
+            --feature-file stage1_input/processed/dmpe_BTCUSD_1m_features.parquet \
+            --output-dir event_label_output
+
+      - name: Upload diagnostic report
+        uses: actions/upload-artifact@v4
+        with:
+          name: dmpe-event-label-diagnostics-${{ github.run_id }}
+          path: event_label_output
+          if-no-files-found: error
+          retention-days: 30
