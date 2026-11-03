@@ -237,3 +237,19 @@ The five methods now exist as independent research utilities, not as an integrat
 - [ ] Only after the above, test whether Kalman, Bayesian updating or Monte Carlo adds incremental value. These three have not yet been evaluated in this ablation.
 
 Workflow: https://github.com/undaviyabrijesh-sys/DMPE/actions/runs/41577802028
+
+
+
+## GARCH volatility forecast evaluation — implementation in progress (2026-11-03)
+
+- [x] Added a dedicated QLIKE experiment for 1h and 3h variance forecasts from completed 5-minute BTCUSD bars.
+- [x] Benchmarks are horizon-matched trailing realized variance and fixed EWMA(0.94), alongside Gaussian-QMLE GARCH(1,1).
+- [x] GARCH parameters are fitted only on the first chronological 70% minus a 3-hour purge; the 15% validation interval is not used for tuning; evaluation starts after a 3-hour test-boundary purge.
+- [x] Forecast at close t targets only the next 12 or 36 completed 5-minute returns. Recursive states update only with observations available at each forecast close.
+- [x] Longest contiguous complete 5-minute segment is selected; partial buckets and gaps are not filled or bridged.
+- [x] Added paired day-block bootstrap intervals for GARCH-minus-baseline QLIKE differences and saved per-timestamp test forecasts.
+- [x] Added unit tests for QLIKE behavior, causal GARCH recursion, incomplete 5-minute buckets and bootstrap output.
+- [ ] Confirm GitHub Actions tests pass and run the QLIKE workflow against Stage 1 artifact run 41509621537.
+- [ ] Review 1h and 3h QLIKE rankings and paired intervals. Retain GARCH for risk forecasting only if it beats both simple baselines robustly; otherwise keep the simpler forecast.
+- [ ] Only after this benchmark, consider Student-t innovations or asymmetric EGARCH/GJR-GARCH to address Bitcoin heavy tails and volatility asymmetry; compare each as a separately declared follow-up, not by tuning against this test set.
+- **Scope:** volatility forecasting only. This does not change the frozen 1h/3h directional 1R-stop / 3R-target experiment, does not use its prospective holdout for tuning, and does not authorize signals, paper trading or live execution.
