@@ -94,3 +94,18 @@ def test_monte_carlo_probabilities_sum_to_one_and_are_reproducible():
     assert a == b
     total = a["target_first_probability"] + a["stop_first_probability"] + a["no_touch_probability"]
     assert total == pytest.approx(1.0)
+
+
+def test_hmm_first_filtered_probability_uses_initial_state_prior():
+    from dmpe.quant_regimes import GaussianHMM
+    rng = np.random.default_rng(91)
+    train = rng.normal(0, 1, (300, 2))
+    model = GaussianHMM(n_states=3, max_iter=8).fit(train)
+    first = train[:1]
+    z = (first - model.scaler_mean_) / model.scaler_std_
+    log_b = model._emission_log_prob(z)[0]
+    expected_log = np.log(np.maximum(model.startprob_, 1e-300)) + log_b
+    expected = np.exp(expected_log - np.max(expected_log))
+    expected /= expected.sum()
+    actual = model.filtered_probabilities(first)[0]
+    np.testing.assert_allclose(actual, expected, rtol=1e-9, atol=1e-12)
