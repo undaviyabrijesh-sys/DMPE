@@ -109,3 +109,21 @@ def test_hmm_first_filtered_probability_uses_initial_state_prior():
     expected /= expected.sum()
     actual = model.filtered_probabilities(first)[0]
     np.testing.assert_allclose(actual, expected, rtol=1e-9, atol=1e-12)
+
+
+def test_garch_qmle_uses_lagged_variance_and_recovers_persistent_process():
+    rng = np.random.default_rng(42)
+    omega, alpha, beta = 1e-6, 0.08, 0.90
+    variance = omega / (1.0 - alpha - beta)
+    returns = np.empty(5000)
+    previous = 0.0
+    for i in range(len(returns)):
+        if i:
+            variance = omega + alpha * previous * previous + beta * variance
+        returns[i] = rng.normal(0.0, np.sqrt(variance))
+        previous = returns[i]
+    fit = fit_garch11(returns[:4000])
+    assert fit.success
+    assert fit.alpha == pytest.approx(alpha, abs=0.04)
+    assert fit.beta == pytest.approx(beta, abs=0.06)
+    assert fit.alpha + fit.beta < 0.999
