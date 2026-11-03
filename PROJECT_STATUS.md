@@ -223,3 +223,17 @@ The five methods now exist as independent research utilities, not as an integrat
 - [ ] Add block-bootstrap uncertainty and multiple-comparison controls before selecting any model variant.
 
 **Important:** the five quantitative utilities are implemented, but only GARCH and HMM are currently wired into the new ablation. None has demonstrated incremental net trading profit. No model is approved for paper/live execution.
+
+
+## GARCH/HMM directional feature ablation — completed 2026-11-03
+
+- [x] Completed the chronological GARCH/HMM ablation using the actual preregistered asymmetric event labels (workflow run 41577802028).
+- [x] Baseline, +GARCH, and +GARCH+HMM variants were evaluated for both 1h and 3h outcomes using Logistic Regression and Histogram Gradient Boosting.
+- [x] Recorded full findings in [research/QUANT_REGIME_ABLATION_RESULTS.md](research/QUANT_REGIME_ABLATION_RESULTS.md).
+- **Decision:** no consistent improvement in balanced accuracy or calibration. Do not add GARCH/HMM as directional alpha features at this stage. No net-PnL simulation was performed in this screening experiment.
+- [ ] Evaluate GARCH in its proper volatility-forecasting role against trailing-RV baselines using QLIKE and out-of-sample loss comparisons.
+- [ ] Evaluate HMM state persistence / volatility separation and then regime-conditioned target geometry using validation-only selection.
+- [ ] Cross-fit training-period regime features before confirmatory use; then run the exact fee/slippage/funding-aware trade simulator with block-bootstrap uncertainty.
+- [ ] Only after the above, test whether Kalman, Bayesian updating or Monte Carlo adds incremental value. These three have not yet been evaluated in this ablation.
+
+Workflow: https://github.com/undaviyabrijesh-sys/DMPE/actions/runs/41577802028
