@@ -1,5 +1,14 @@
 # DMPE project status
 
+## Milestone 6 — MTF structure & entry research
+- [x] Added completed 5m/15m/1h/4h resampling, confirmed swing structure, 4h/1h context, 15m setup context and 5m pullback/sweep/breakout-retest candidates.
+- [x] Added gap-aware taker-fee/slippage replay; stale entries and trades crossing missing data are excluded/censored.
+- [x] Completed first replay (run 41567256039) and 36-case gate ablation (run 41567250195); tests passed (run 41567285342).
+- [ ] Compare prediction-only, structure-only and combined predictive-plus-structure on a frozen prospective period after funding/spread/impact validation.
+- Decision: MTF remains a separate research layer, not an approved signal. All 36 gate-ablation cases had negative net expectancy and net PF below 1. Keep FLAT valid; no live orders.
+- Full results and assumptions: [research/MTF_STRUCTURE_RESULTS.md](research/MTF_STRUCTURE_RESULTS.md).
+
+
 ## Milestone 0 — Data-pipeline bootstrap
 - [x] Private GitHub repository and project layout
 - [x] Historical REST client with 2,000-candle paging and rate-limit backoff
