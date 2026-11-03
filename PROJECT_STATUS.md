@@ -253,3 +253,12 @@ Workflow: https://github.com/undaviyabrijesh-sys/DMPE/actions/runs/41577802028
 - [ ] Review 1h and 3h QLIKE rankings and paired intervals. Retain GARCH for risk forecasting only if it beats both simple baselines robustly; otherwise keep the simpler forecast.
 - [ ] Only after this benchmark, consider Student-t innovations or asymmetric EGARCH/GJR-GARCH to address Bitcoin heavy tails and volatility asymmetry; compare each as a separately declared follow-up, not by tuning against this test set.
 - **Scope:** volatility forecasting only. This does not change the frozen 1h/3h directional 1R-stop / 3R-target experiment, does not use its prospective holdout for tuning, and does not authorize signals, paper trading or live execution.
+
+
+### GARCH QMLE implementation audit — correction required before accepting results (2026-11-03)
+
+- [x] Audited the first QLIKE run (41587956808) after implausible forecast errors and found the shared GARCH likelihood scored each return using a variance updated with that same return. This is a timing/lookahead defect in parameter estimation.
+- [x] Corrected the Gaussian-QMLE recursion: score return t with variance known through t-1, then update variance using return t for the forecast of t+1.
+- [x] Added a synthetic persistent-GARCH recovery regression test (known alpha=0.08, beta=0.90).
+- [ ] Re-run all CI and the QLIKE workflow using the corrected likelihood. The first QLIKE artifact and its metrics are invalid and must not be interpreted.
+- [ ] Re-run the GARCH/HMM feature ablation after the correction before relying on its GARCH-related comparison; the HMM implementation/results are not changed by this likelihood correction.
