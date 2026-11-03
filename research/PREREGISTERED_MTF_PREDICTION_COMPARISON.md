@@ -2,7 +2,7 @@
 
 **Status:** Frozen protocol for a new prospective comparison; no results have been inspected.
 **Freeze date:** 2026-11-03 UTC.
-**Prospective evaluation window:** 2026-11-04 00:00 UTC through 2027-01-03 00:00 UTC.
+**Planned prospective evaluation window:** 2026-11-04 00:00 UTC through 2027-01-03 00:00 UTC, conditional on the pre-period model/evaluator freeze checklist below. If the compatible model artifact and evaluator are not frozen before the start, move the start to the next 00:00 UTC boundary and amend this document before inspecting any outcomes.
 **Market:** Delta Exchange India BTCUSD perpetual.
 **Purpose:** Test whether the existing predictive engine and the separate frozen MTF structure engine provide complementary decision value.
 **Execution:** Research / paper observation only. No exchange credentials or order placement.
@@ -21,7 +21,7 @@ Evaluate three arms on the same completed 5-minute decision timestamps:
 2. **Structure-only:** the original frozen MTF candidate from the 4h + 1h directional gate, 15m setup context and 5m entry module. No changes to pivots, EMA, lookback, entry definitions or module priority. If multiple modules conflict in direction on one timestamp, the structure decision is FLAT.
 3. **Combined:** take a directional decision only when prediction-only and structure-only agree on the same timestamp. Disagreement, missing prediction, missing structure or a neutral output is FLAT. No weighted score or learned ensemble is permitted in this first comparison.
 
-All arms are sampled on the identical 5-minute decision grid. Prediction-only must be sampled at the same timestamps as the structure decision; it must not receive extra opportunities from its native 1-minute cadence.
+All arms are sampled on the identical 5-minute decision grid. Prediction-only must be sampled at the same timestamps as the structure decision; it must not receive extra opportunities from its native 1-minute cadence. **Important implementation prerequisite:** the current repeated walk-forward script evaluates symmetric barrier labels and does not yet emit a frozen model for the asymmetric 1x-stop / 3x-target labels. Before the prospective window opens, implement and test that exact target/model path, train only on pre-period data, select its threshold only on a pre-period validation block, then freeze the model artifact and hash. Do not substitute a symmetric-label model or a model trained on any prospective rows.
 
 ## Targets and execution comparability
 
@@ -65,6 +65,7 @@ The primary comparison is whether combined improves net expectancy and drawdown 
 ## Pre-period freeze checklist
 
 Before 2026-11-04 00:00 UTC:
+- [ ] Implement the predictive model path for the exact preregistered asymmetric 1x-stop / 3x-target labels; the current walk-forward script is not yet compatible.
 - [ ] Verify the prediction model artifact, training cutoff, feature schema and validation threshold.
 - [ ] Verify the frozen MTF engine commit and its point-in-time tests.
 - [ ] Verify the common 5-minute timestamp join and no-lookahead tests.
