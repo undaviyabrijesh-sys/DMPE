@@ -44,6 +44,10 @@ The future live/paper decision engine may update its regime state every complete
 
 For each fixed and adaptive policy report coverage, trades/day, win rate, gross/net expectancy, profit factor, drawdown, turnover, regime-level results, sensitivity to costs, and day-block-bootstrap uncertainty. Report the benchmark and all tested variants. A higher win rate or more trades is not sufficient evidence of improvement.
 
+## Superseded prospective date
+
+The 2026-11-03 through 2027-01-02 prospective window stated in the original asymmetric experiment is withdrawn for the revised geometry research. That original document remains unchanged as an archival record of the earlier fixed-geometry hypothesis. The amended prediction-vs-structure comparison protocol is the controlling prospective protocol; its planned 2026-11-04 start is conditional on the complete pre-period freeze checklist. If not ready, shift the start to the next UTC midnight and amend before inspecting any outcomes.
+
 ## Prospective comparison impact
 
 The prediction-only arm may use the single geometry policy selected and frozen on pre-period validation. Structure-only and combined arms must use the same frozen geometry policy for fair comparison. The original fixed 1R/3R result may also be reported as a benchmark, but it is not the only eligible geometry. Do not inspect prospective outcomes until model, geometry policy, evaluator and data manifest are frozen.
