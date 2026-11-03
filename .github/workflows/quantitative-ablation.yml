@@ -18,12 +18,16 @@ on:
       hmm_iterations:
         description: "Maximum HMM EM iterations"
         required: true
-        default: "30"
+        default: "12"
         type: string
 
 permissions:
   contents: read
   actions: read
+
+concurrency:
+  group: dmpe-quantitative-ablation-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   quantitative-ablation:
@@ -57,7 +61,7 @@ jobs:
             --feature-file stage1_input/processed/dmpe_BTCUSD_1m_features.parquet \
             --schema-file stage1_input/processed/feature_schema.json \
             --output-dir quant_ablation_output \
-            --hmm-iterations "${{ github.event.inputs.hmm_iterations || '30' }}"
+            --hmm-iterations "${{ github.event.inputs.hmm_iterations || '12' }}"
 
       - name: Upload quantitative ablation report
         uses: actions/upload-artifact@v4
