@@ -89,10 +89,13 @@ def _profit_factor(pnl: pd.Series) -> float | None:
 
 
 def _score(trades: pd.DataFrame, candidate_count: int, fee: float, slip: float) -> dict:
-    if trades.empty:
+    censored_count = int(trades["censored"].fillna(False).sum()) if not trades.empty and "censored" in trades else 0
+    scored = trades.loc[~trades["censored"].fillna(False)].copy() if not trades.empty and "censored" in trades else trades.copy()
+    if scored.empty:
         return {
-            "candidate_signals": candidate_count, "trades": 0, "trades_per_day": 0.0,
-            "win_rate_pct": None, "gross_pnl_points": 0.0, "net_pnl_points": 0.0,
+            "candidate_signals": candidate_count, "trades": 0, "censored_trades": censored_count,
+            "trades_per_day": 0.0, "win_rate_pct": None,
+            "gross_pnl_points": 0.0, "net_pnl_points": 0.0,
             "gross_expectancy_R": None, "net_expectancy_R": None,
             "gross_profit_factor": None, "net_profit_factor": None,
             "avg_cost_points": None, "median_cost_points": None,
@@ -100,26 +103,27 @@ def _score(trades: pd.DataFrame, candidate_count: int, fee: float, slip: float) 
             "slippage_bps_per_side": slip,
         }
 
-    gross = trades["gross_pnl_points"].astype(float)
-    net = trades["net_pnl_points"].astype(float)
-    equity = trades["net_r"].astype(float).cumsum()
+    gross = scored["gross_pnl_points"].astype(float)
+    net = scored["net_pnl_points"].astype(float)
+    equity = scored["net_r"].astype(float).cumsum()
     drawdown = equity - equity.cummax()
-    start = pd.to_datetime(trades["entry_time"], utc=True).min()
-    end = pd.to_datetime(trades["exit_time"], utc=True).max()
+    start = pd.to_datetime(scored["entry_time"], utc=True).min()
+    end = pd.to_datetime(scored["exit_time"], utc=True).max()
     days = max((end - start).total_seconds() / 86400.0, 1 / 1440)
     return {
         "candidate_signals": candidate_count,
-        "trades": int(len(trades)),
+        "trades": int(len(scored)),
+        "censored_trades": censored_count,
         "trades_per_day": float(len(trades) / days),
         "win_rate_pct": float((net > 0).mean() * 100),
         "gross_pnl_points": float(gross.sum()),
         "net_pnl_points": float(net.sum()),
-        "gross_expectancy_R": float((gross / trades["risk_points"]).mean()),
-        "net_expectancy_R": float(trades["net_r"].mean()),
+        "gross_expectancy_R": float((gross / scored["risk_points"]).mean()),
+        "net_expectancy_R": float(scored["net_r"].mean()),
         "gross_profit_factor": _profit_factor(gross),
         "net_profit_factor": _profit_factor(net),
-        "avg_cost_points": float(trades["cost_points"].mean()),
-        "median_cost_points": float(trades["cost_points"].median()),
+        "avg_cost_points": float(scored["cost_points"].mean()),
+        "median_cost_points": float(scored["cost_points"].median()),
         "max_drawdown_R": float(drawdown.min()),
         "fee_bps_per_side": fee,
         "slippage_bps_per_side": slip,
@@ -211,8 +215,8 @@ def main() -> None:
             "funding": "not included",
             "maker_fills": "not assumed; entries and exits modelled as taker",
             "data_gap_caveat": (
-                "The current replay advances across observed 1m rows; it does not yet censor a position "
-                "when a missing minute occurs during its holding window. Results remain diagnostic."
+                "A missing minute during an active position censors that trade; censored rows are retained "
+                "for audit but excluded from performance metrics. Signals without an exact next-minute open are skipped."
             ),
             "combined_rule": (
                 "Combined consensus is long only when one or more modules signal long and none signal short; "
