@@ -194,3 +194,16 @@ The Binance archive can accelerate historical trade-flow research, but it does n
 - [ ] Do not promote these estimates to trade signals until they improve net-of-cost out-of-sample expectancy and uncertainty versus the existing baseline. No execution enabled.
 
 These modules are research components, not yet integrated into the production feature pipeline or the decision engine. GARCH forecasts volatility, not direction; HMM states are latent statistical clusters, not guaranteed economic regimes. The next models (Kalman, Bayesian updating and Monte Carlo) remain planned, not implemented.
+
+
+## Additional quantitative components (2026-11-03)
+
+- [x] Added a causal local-linear-trend Kalman filter; noise scales are estimated from the training slice and test observations are filtered sequentially without smoothing.
+- [x] Added a sequential Bayesian odds updater that accepts externally calibrated likelihood ratios. It deliberately does not estimate likelihood ratios from the evaluation sample.
+- [x] Added empirical block-bootstrap Monte Carlo barrier simulation with explicit target-first, stop-first and no-touch probabilities; block size is configurable and seeded runs are reproducible.
+- [x] Added synthetic tests for Kalman future-perturbation invariance, Bayesian odds arithmetic, and Monte Carlo probability normalization/reproducibility.
+- [ ] Verify the latest GitHub Actions test run passes for all five quantitative components.
+- [ ] Calibrate Bayesian likelihood ratios and Kalman noise parameters strictly on chronological training/validation data; compare each module with simple baselines.
+- [ ] Evaluate the five components individually and incrementally, then only retain those that improve net-of-cost out-of-sample expectancy, drawdown or calibrated risk estimates.
+
+The five methods now exist as independent research utilities, not as an integrated trading model. In particular, Monte Carlo probabilities inherit the empirical bootstrap assumptions, Bayesian updates are only meaningful with calibrated likelihood ratios, and none of these components has demonstrated profitability yet.
