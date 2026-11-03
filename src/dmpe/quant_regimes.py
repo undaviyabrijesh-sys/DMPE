@@ -195,7 +195,8 @@ class GaussianHMM:
         probs = np.empty((len(z), self.n_states), dtype=float)
         prior = self.startprob_.copy()
         for t in range(len(z)):
-            prior = prior @ self.transmat_
+            if t > 0:
+                prior = prior @ self.transmat_
             log_p = np.log(np.maximum(prior, 1e-300)) + log_b[t]
             log_p -= self._logsumexp(log_p, axis=0)
             posterior = np.exp(log_p)
