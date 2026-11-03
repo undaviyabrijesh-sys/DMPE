@@ -3,10 +3,13 @@
 ## Milestone 6 — MTF structure & entry research
 - [x] Added completed 5m/15m/1h/4h resampling, confirmed swing structure, 4h/1h context, 15m setup context and 5m pullback/sweep/breakout-retest candidates.
 - [x] Added gap-aware taker-fee/slippage replay; stale entries and trades crossing missing data are excluded/censored.
-- [x] Completed first replay (run 41567256039) and 36-case gate ablation (run 41567250195); tests passed (run 41567285342).
-- [ ] Compare prediction-only, structure-only and combined predictive-plus-structure on a frozen prospective period after funding/spread/impact validation.
-- Decision: MTF remains a separate research layer, not an approved signal. All 36 gate-ablation cases had negative net expectancy and net PF below 1. Keep FLAT valid; no live orders.
-- Full results and assumptions: [research/MTF_STRUCTURE_RESULTS.md](research/MTF_STRUCTURE_RESULTS.md).
+- [x] Completed first replay (run 41567256039), 36-case post-hoc gate ablation (run 41567250195), and tests (run 41567285342).
+- [x] Froze a new prospective protocol for prediction-only vs structure-only vs combined comparison: [research/PREREGISTERED_MTF_PREDICTION_COMPARISON.md](research/PREREGISTERED_MTF_PREDICTION_COMPARISON.md).
+- [ ] Before 2026-11-04 00:00 UTC, verify model artifact/training cutoff, common 5m timestamp alignment, point-in-time tests, funding convention and frozen evaluator hash.
+- [ ] Run the prospective comparison from 2026-11-04 00:00 UTC through 2027-01-03 00:00 UTC without inspecting partial outcomes or tuning.
+- Decision: MTF remains a separate research layer, not an approved signal. All 36 post-hoc gate-ablation cases had negative net expectancy and net PF below 1. The MTF engine must not be promoted based on these already-inspected results. Keep FLAT valid; no live orders.
+- Full exploratory results and assumptions: [research/MTF_STRUCTURE_RESULTS.md](research/MTF_STRUCTURE_RESULTS.md).
+
 
 
 ## Milestone 0 — Data-pipeline bootstrap
