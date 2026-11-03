@@ -539,8 +539,10 @@ def main() -> None:
             zone_rows = [{
                 "Type": z["kind"], "Zone low": z["low"], "Zone high": z["high"],
                 "Width": z["high"] - z["low"], "Strength (ATR)": z["strength"],
+                "Origin type": z.get("origin_type", "BASE_LEG"),
+                "Swing candle": z.get("origin_time", z["created_at"]),
                 "Retests": z["touches"], "Distance (ATR)": z["distance_atr"],
-                "Origin": z["created_at"],
+                "Confirmed at": z["created_at"],
             } for z in zones]
             st.dataframe(pd.DataFrame(zone_rows), use_container_width=True, hide_index=True)
             nearest = min(zones, key=lambda z: z["distance_atr"])
