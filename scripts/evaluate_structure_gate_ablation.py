@@ -114,7 +114,7 @@ def _score(trades: pd.DataFrame, candidate_count: int, fee: float, slip: float) 
         "candidate_signals": candidate_count,
         "trades": int(len(scored)),
         "censored_trades": censored_count,
-        "trades_per_day": float(len(trades) / days),
+        "trades_per_day": float(len(scored) / days),
         "win_rate_pct": float((net > 0).mean() * 100),
         "gross_pnl_points": float(gross.sum()),
         "net_pnl_points": float(net.sum()),
