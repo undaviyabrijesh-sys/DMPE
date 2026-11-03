@@ -39,7 +39,7 @@ def test_partition_masks_are_chronological_and_purge_boundaries():
 
 
 def test_event_grid_reports_all_horizons_and_multipliers():
-    n = 1_200
+    n = 6_000
     time = pd.date_range("2025-01-01T00:00:00Z", periods=n, freq="1min")
     close = 100 + np.cumsum(np.sin(np.arange(n) / 8) * 0.03)
     frame = pd.DataFrame({
