@@ -237,3 +237,43 @@ The five methods now exist as independent research utilities, not as an integrat
 - [ ] Only after the above, test whether Kalman, Bayesian updating or Monte Carlo adds incremental value. These three have not yet been evaluated in this ablation.
 
 Workflow: https://github.com/undaviyabrijesh-sys/DMPE/actions/runs/41577802028
+
+
+
+## GARCH volatility forecast evaluation — implementation in progress (2026-11-03)
+
+- [x] Added a dedicated QLIKE experiment for 1h and 3h variance forecasts from completed 5-minute BTCUSD bars.
+- [x] Benchmarks are horizon-matched trailing realized variance and fixed EWMA(0.94), alongside Gaussian-QMLE GARCH(1,1).
+- [x] GARCH parameters are fitted only on the first chronological 70% minus a 3-hour purge; the 15% validation interval is not used for tuning; evaluation starts after a 3-hour test-boundary purge.
+- [x] Forecast at close t targets only the next 12 or 36 completed 5-minute returns. Recursive states update only with observations available at each forecast close.
+- [x] Longest contiguous complete 5-minute segment is selected; partial buckets and gaps are not filled or bridged.
+- [x] Added paired day-block bootstrap intervals for GARCH-minus-baseline QLIKE differences and saved per-timestamp test forecasts.
+- [x] Added unit tests for QLIKE behavior, causal GARCH recursion, incomplete 5-minute buckets and bootstrap output.
+- [ ] Confirm GitHub Actions tests pass and run the QLIKE workflow against Stage 1 artifact run 41509621537.
+- [ ] Review 1h and 3h QLIKE rankings and paired intervals. Retain GARCH for risk forecasting only if it beats both simple baselines robustly; otherwise keep the simpler forecast.
+- [ ] Only after this benchmark, consider Student-t innovations or asymmetric EGARCH/GJR-GARCH to address Bitcoin heavy tails and volatility asymmetry; compare each as a separately declared follow-up, not by tuning against this test set.
+- **Scope:** volatility forecasting only. This does not change the frozen 1h/3h directional 1R-stop / 3R-target experiment, does not use its prospective holdout for tuning, and does not authorize signals, paper trading or live execution.
+
+
+### GARCH QMLE implementation audit — correction required before accepting results (2026-11-03)
+
+- [x] Audited the first QLIKE run (41587956808) after implausible forecast errors and found the shared GARCH likelihood scored each return using a variance updated with that same return. This is a timing/lookahead defect in parameter estimation.
+- [x] Corrected the Gaussian-QMLE recursion: score return t with variance known through t-1, then update variance using return t for the forecast of t+1.
+- [x] Added a synthetic persistent-GARCH recovery regression test (known alpha=0.08, beta=0.90).
+- [ ] Re-run all CI and the QLIKE workflow using the corrected likelihood. The first QLIKE artifact and its metrics are invalid and must not be interpreted.
+- [ ] Re-run the GARCH/HMM feature ablation after the correction before relying on its GARCH-related comparison; the HMM implementation/results are not changed by this likelihood correction.
+
+
+### Corrected GARCH QLIKE results — completed 2026-11-03
+
+- [x] Corrected likelihood run completed successfully: workflow run [41588407996](https://github.com/undaviyabrijesh-sys/DMPE/actions/runs/41588407996); report artifact dmpe-garch-qlike-41588407996.
+- [x] CI passed: 60 tests, including the synthetic known-parameter GARCH recovery test.
+- Evaluation used the longest contiguous complete 5m segment (249,334 returns), with 37,353 1h and 37,329 3h out-of-sample forecasts from 2026-06-25 through 2026-11-02. Training ended 2026-02-15; a 3h purge was applied.
+- Corrected Gaussian-QMLE fit: omega=1.79899e-8, alpha=0.11443, beta=0.88456, alpha+beta=0.99899 (near the stationarity cap).
+- **1h QLIKE:** GARCH -10.4313; trailing RV - (score 97.8708, affected by one near-zero trailing forecast); EWMA(0.94) -10.3769. GARCH-minus-EWMA paired day-block 95% interval: [-0.0804, -0.0262].
+- **3h QLIKE:** GARCH -9.2096; trailing RV -9.0518; EWMA(0.94) -9.1039. GARCH-minus-trailing-RV interval: [-0.2181, -0.0971]; GARCH-minus-EWMA interval: [-0.1530, -0.0527].
+- Calibration diagnostic: aggregate forecast/realized variance ratio was 1.20 (1h) and 1.37 (3h) for GARCH, versus approximately 1.00 for both simple baselines. Mean absolute log-variance error was also higher for GARCH (0.85/0.87) than EWMA (0.72/0.69).
+- **Interpretation:** GARCH wins on mean QLIKE versus EWMA in both horizons, but over-forecasts aggregate variance and has worse absolute log error. Treat it as a promising conservative risk-forecast candidate, not a calibrated forecast or directional alpha. The 1h trailing-RV comparison is especially sensitive to a near-zero forecast; rely more on the paired GARCH-vs-EWMA comparison.
+- [ ] Test Student-t innovations and asymmetric EGARCH/GJR-GARCH as separately declared follow-ups for Bitcoin heavy tails and leverage effects. Do not tune them on the current test segment; use fresh validation/forward data.
+- [ ] Review the corrected GARCH/HMM directional ablation rerun (workflow run 41588160449). The earlier run 41577802028 used the defective likelihood and is superseded for any GARCH-related conclusion.
+- **Release gate:** no direction prediction, trading signal, paper trading or live execution is approved by this volatility-only result.
