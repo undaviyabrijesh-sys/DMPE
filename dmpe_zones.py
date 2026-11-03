@@ -96,8 +96,12 @@ def detect_structure_zones(
             "kind": direction,
             "low": float(base["low"]),
             "high": float(base["high"]),
-            "created_at": base["time"],
+            # Confirmation occurs at the end of the displacement leg.
+            # Keep the base candle separately for charting, but never expose
+            # this zone to a backtest before the confirming bar has closed.
+            "created_at": frame.at[end, "time"],
             "origin_index": base_idx,
+            "available_index": end,
             "strength": round(float(strength), 2),
             "origin_type": "BASE_LEG",
             "origin_time": base["time"],
@@ -129,7 +133,8 @@ def detect_structure_zones(
                 raw.append({
                     "kind": "SUPPLY", "low": pivot_low, "high": pivot_high,
                     "created_at": confirm_time, "origin_time": origin_time,
-                    "origin_index": confirm_index,
+                    "origin_index": pivot,
+                    "available_index": confirm_index,
                     "strength": round(min(4.0, departure / float(pivot_atr)), 2),
                     "origin_type": "SWING_HIGH",
                 })
@@ -139,7 +144,8 @@ def detect_structure_zones(
                 raw.append({
                     "kind": "DEMAND", "low": pivot_low, "high": pivot_high,
                     "created_at": confirm_time, "origin_time": origin_time,
-                    "origin_index": confirm_index,
+                    "origin_index": pivot,
+                    "available_index": confirm_index,
                     "strength": round(min(4.0, departure / float(pivot_atr)), 2),
                     "origin_type": "SWING_LOW",
                 })
@@ -182,7 +188,8 @@ def detect_structure_zones(
     for zone in merged:
         low, high = zone["low"], zone["high"]
         origin = zone["origin_index"]
-        later = frame.iloc[origin + 1 :]
+        available = int(zone.get("available_index", origin))
+        later = frame.iloc[available + 1 :]
         touches = int(((later["low"] <= high) & (later["high"] >= low)).sum())
         # Ignore the first bar that initiates the displacement when counting
         # meaningful returns to the origin.
@@ -250,7 +257,7 @@ def add_zones_to_chart(fig: Any, zones: list[dict[str, Any]], view: pd.DataFrame
     }
     view_start = view["time"].iloc[0]
     for index, zone in enumerate(zones):
-        created = zone["created_at"]
+        created = zone.get("origin_time", zone["created_at"])
         if created < view_start:
             created = view_start
         fill, line = palette[zone["kind"]]
