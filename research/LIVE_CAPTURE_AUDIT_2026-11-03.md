@@ -63,3 +63,47 @@ Not yet established. The next capture must confirm:
 - exact 39-feature schema, null masks, and numeric parity with the frozen historical feature builder.
 
 No live prediction or order routing is enabled by this audit.
+
+
+## Second capture: migrated feeds verified
+
+- Workflow run: [41601974295](https://github.com/undaviyabrijesh-sys/DMPE/actions/runs/41601974295)
+- Raw artifact: `dmpe-live-capture-41601974295`
+- Derived artifact: `dmpe-live-orderflow-41601974295`
+- Capture window: 2026-11-03 08:16:15.780 UTC to 08:21:14.627 UTC
+- Raw records: 1,938
+- Workflow and repository tests: passed
+
+| Event | Count | Notes |
+|---|---:|---|
+| `trades` | 618 | Same trade payload; microsecond event time |
+| `ob_l2` | 598 | Top-15 bid/ask snapshots |
+| `candlestick_1m` | 508 | Six traded-price minute buckets and six mark-price minute buckets; repeated in-progress updates |
+| `mark_price` | 148 | Mark point updates |
+| `ticker` | 59 | Nested ticker OI snapshots |
+| `funding_rate` | 5 | `fr,fi,nfr,sy,ts` verified |
+| `system_status` | 1 | `status=live` |
+| `subscriptions` | 1 | Server acknowledged all requested subscriptions |
+
+The observed funding sample had `fi=28800`, an explicit `nfr` timestamp, and a numeric `fr`. The observed mark-candle payload used `sy=MARK:BTCUSD`, `cst` (microsecond candle-start epoch), `ts` (microsecond update timestamp), and OHLC fields. Traded-price candles used the same shape with `sy=BTCUSD`.
+
+### Critical timing issue found in the derived output
+
+The pre-fix aggregation reported six minute rows from 08:17 to 08:22 even though the capture began at 08:16:15 and ended at 08:21:14. That means it included:
+- the partial startup minute (08:16), before a full minute of capture coverage existed;
+- the still-open final minute (08:21), incorrectly timestamped as available at 08:22.
+
+Those rows must not be passed into a live model. They create incomplete inputs and can make a feature timestamp appear later than the latest observation actually received.
+
+A receive-time completeness watermark has now been added to `aggregate_event_records`:
+- exclude the minute in progress when capture starts;
+- withhold a minute until its close is at least five seconds behind the latest recorder receive time;
+- keep internal missing minutes as explicit gaps / NaNs rather than forward-filling them.
+
+Tests were added for partial startup/current-minute exclusion and invalid watermark settings. The next workflow run must verify that the corrected output contains only complete minutes.
+
+### Current interpretation
+
+The live capture confirms that the migrated funding and mark-candle channels are available and parsable. It does not establish hourly OI parity: ticker OI remains a point-in-time snapshot and must be stored separately from hourly OI candle observations. Feature parity with the frozen 39-column classifier remains unproven.
+
+No shadow predictions or order routing are enabled.
