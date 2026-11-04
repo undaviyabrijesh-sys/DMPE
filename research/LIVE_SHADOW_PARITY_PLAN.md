@@ -76,7 +76,7 @@ The live candle dataset build is now part of the capture workflow. Its next succ
 ## Current status and blockers
 
 - Public recorder capture works through GitHub Actions without exchange credentials.
-- The latest repository test suite passed at commit `e2e042ebb623dc66d7f2c50b1f2cdb3ccd647b2c` before the final test-fixture correction; re-run status for the newest commit must be green before merging.
+- The full repository test suite passed at commit `8cd70ac8f7e445a5f05df97c45d46481ea952680` after correcting the live-candle test fixtures.
 - The capture workflow now builds order-flow features and causally finalized traded/mark candles; its latest full run is still being validated.
 - Feature parity is not established. The 39-feature training schema and the fitted model bundle still need to be loaded from the historical workflow artifacts and pinned by checksum.
 - The VPS is not provisioned. This is not a blocker for REST-vs-WebSocket parity checks in GitHub Actions, but it is required for durable continuous shadow collection.
