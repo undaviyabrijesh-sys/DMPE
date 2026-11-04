@@ -52,7 +52,7 @@ def test_closed_candle_builder_uses_latest_update_and_watermark():
 def test_mark_candle_without_volume_is_accepted_as_zero_volume():
     records = [
         _record(
-            "2024-01-01T00:00:00Z",
+            "2024-01-01T00:00:15Z",
             "2024-01-01T00:00:00Z",
             100,
             symbol="MARK:BTCUSD",
