@@ -48,8 +48,8 @@ def test_aggregation_timestamps_completed_minute_and_preserves_missingness():
             "b": [["99", "10"]], "a": [["101", "5"]],
             "ts": 1704067200030000,
         }},
-        {"received_at": "2024-01-01T00:03:00.010Z", "event": {
-            "type": "trades", "p": "102", "s": 4, "r": "t", "t": 1704067380010000
+        {"received_at": "2024-01-01T00:04:00.010Z", "event": {
+            "type": "trades", "p": "102", "s": 4, "r": "t", "t": 1704067320010000
         }},
     ]
     frame = aggregate_event_records(records)
