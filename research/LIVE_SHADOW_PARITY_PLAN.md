@@ -27,28 +27,42 @@ It timestamps completed candle features at candle close and delays hourly featur
 
 The existing order-flow processor handles trades, L2 and explicit funding snapshots, but it is not a complete live adapter for the frozen Stage 1 feature schema. Its order-flow columns are not part of the frozen candidate.
 
-## Current Delta compatibility issue
+## Current Delta compatibility and capture findings
 
-Delta's current India API documentation states that the legacy `funding_rate` WebSocket channel was fully deprecated on 31 October 2026. The recorder must not rely on that channel for a new prospective run.
+The recorder uses the new public India WebSocket endpoint, `wss://public-socket.india.delta.exchange`. Delta's documentation describes `funding_rate`, `mark_price` and `candlesticks` as migrated public channels on this endpoint. The July 2026 retirement notice applied to the old channels on the legacy private WebSocket endpoint; it does not mean the migrated public `funding_rate` channel should be omitted.
 
-The current public ticker sample exposes open interest in the `oi` field, and the REST historical-candle API documents `FUNDING:BTCUSD`, `OI:BTCUSD` and `MARK:...` symbol conventions. Before using these for live feature construction, validate:
-1. response units and candle timestamp semantics;
-2. whether the current hourly bar is complete;
-3. publication delay and revision behaviour;
-4. missing/stale data behaviour;
-5. exact agreement with the historical Stage 1 input convention.
+The REST historical-candle documentation explicitly supports:
+- traded-price candles: `BTCUSD`;
+- mark-price candles: `MARK:BTCUSD`;
+- funding history: `FUNDING:BTCUSD`;
+- open-interest history: `OI:BTCUSD`.
 
-Do not substitute a ticker snapshot for an hourly close without an explicit, tested aggregation rule. Do not forward-fill missing minute prices or stale funding/OI observations.
+Official reference: https://docs.delta.exchange/ (India API, Historical OHLC Candles and WebSocket candlesticks/channel migration sections).
+
+Two public five-minute captures have been audited:
+- first capture: trades, L2, traded candles, mark point updates and ticker/OI snapshots;
+- second capture: additionally verified `funding_rate` snapshots (`fr,fi,nfr,sy,ts`) and mark-price candle messages (`sy=MARK:BTCUSD`, `cst`, `ts`, OHLC).
+
+The ticker `oi` field is a snapshot, not an hourly historical candle. The short capture's five funding snapshots are also not enough to reproduce the historical hourly funding series. Therefore the live feature adapter must use verified completed 1h REST observations for funding and OI, with the exact Stage 1 one-hour-plus-one-minute availability lag. Ticker OI and funding WebSocket snapshots can be stored for monitoring and later diagnostics, but must not silently replace the model inputs.
+
+The second capture exposed a timing defect in the first live order-flow output: partial startup and in-progress final minutes were stamped as if complete. A five-second receive-time watermark is now implemented in the order-flow aggregator. A separate candle finalizer has also been added to:
+- retain the latest update per 1m candle;
+- exclude a partially captured startup minute;
+- withhold any candle until its close is behind the receive-time watermark;
+- preserve Delta candle-open timestamps, which the shared feature builder converts to feature-close timestamps.
+
+The live candle dataset build is now part of the capture workflow. Its next successful run must be inspected before declaring candle finalization validated on live data.
 
 ## Implementation sequence
 
-1. **Raw-event contract tests:** parse actual Delta event envelopes, event timestamps, symbol identity and candle OHLCV fields. Keep unknown event shapes visible in diagnostics rather than silently coercing them.
-2. **Causal live bar store:** assemble one completed minute at a time; reject duplicates, late revisions and incomplete bars from prediction; preserve gap markers.
-3. **Funding/OI adapter:** use only verified current sources and completed hourly observations; apply the same one-hour-plus-one-minute availability lag as Stage 1.
-4. **Feature parity:** call the shared Stage 1 feature builder and compare the emitted columns, order, dtypes, null masks and numeric values against a deterministic replay fixture built from the same raw source data. Require exact schema equality and documented numerical tolerances.
-5. **Model bundle:** export the frozen fitted imputer and classifier, ordered feature names, class order, training cutoff, package versions, source commit and artifact hashes. Refuse mismatched bundles.
-6. **Shadow logger:** write timestamped class probabilities and data-quality metadata only after all gates pass. Never submit, stage or simulate an order.
-7. **Operational checks:** record feed heartbeats, event counts, reconnects, minute coverage, stale-feed duration, prediction count and exceptions. Fail closed on missing data or schema drift.
+1. **Raw-event contract:** actual Delta payload shapes and timestamp units are now observed for trades, L2, traded candles, mark candles, mark updates, ticker, funding and system status. Keep diagnostics for unknown shapes.
+2. **Causal live bars:** implemented receive-time watermarking for event minutes and a separate finalizer for traded/mark candles. Synthetic tests cover startup/current-minute exclusion, duplicate update selection and mark candles without volume. Confirm this behavior against the next live capture artifact.
+3. **Funding/OI adapter:** add a public REST adapter for completed 1h `FUNDING:BTCUSD` and `OI:BTCUSD` candles. Filter out any currently forming hourly candle and preserve original candle-open timestamps.
+4. **Historical/live comparison:** over a shared closed timestamp window, compare WebSocket traded and mark candles to REST history. Report missing bars, duplicates, OHLC differences, candle revisions and end-to-end receive latency.
+5. **Feature parity:** assemble sufficient warm-up history (at least 5h of 1m traded/mark candles and 48h of 1h funding/OI history), call the shared Stage 1 feature builder, and compare the exact saved 39-feature schema, order, dtypes, null masks and numeric values. Require exact schema equality and documented numerical tolerances.
+6. **Model bundle:** export the frozen fitted imputer and classifier, ordered feature names, class order, training cutoff, package versions, source commit and artifact hashes. Refuse mismatched bundles.
+7. **Shadow logger:** write timestamped class probabilities and data-quality metadata only after all gates pass. Never submit, stage or simulate an order.
+8. **Operational checks:** record feed heartbeats, event counts, reconnects, minute coverage, stale-feed duration, prediction count and exceptions. Fail closed on missing data or schema drift.
 
 ## Shadow validation boundaries
 
@@ -59,6 +73,11 @@ Do not substitute a ticker snapshot for an hourly close without an explicit, tes
 - Keep a separate shadow calibration/development window and a later untouched prospective evaluation window. Select any calibration or confidence threshold only in the development window, then freeze it before the prospective test.
 - Before any later P&L analysis, preregister fees, GST, spread, slippage, funding cashflows, fill/no-fill, entry timing, overlap rules and risk limits.
 
-## Current blocker
+## Current status and blockers
 
-The VPS has not been provisioned according to the existing deployment notes, and no representative raw capture sample has been audited in this task. Synthetic tests can validate parser logic, but live schema parity cannot be claimed until an actual recorder sample is checked against the documented Delta payloads.
+- Public recorder capture works through GitHub Actions without exchange credentials.
+- The latest repository test suite passed at commit `e2e042ebb623dc66d7f2c50b1f2cdb3ccd647b2c` before the final test-fixture correction; re-run status for the newest commit must be green before merging.
+- The capture workflow now builds order-flow features and causally finalized traded/mark candles; its latest full run is still being validated.
+- Feature parity is not established. The 39-feature training schema and the fitted model bundle still need to be loaded from the historical workflow artifacts and pinned by checksum.
+- The VPS is not provisioned. This is not a blocker for REST-vs-WebSocket parity checks in GitHub Actions, but it is required for durable continuous shadow collection.
+- No shadow predictions, paper orders or live orders are enabled.
