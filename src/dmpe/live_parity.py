@@ -99,3 +99,53 @@ def trailing_contiguous_rows(
             break
         count += 1
     return count
+
+
+
+def assess_feature_warmup(
+    profiles: dict[str, dict],
+    *,
+    price_rows_required: int = 241,
+    hourly_rows_required: int = 25,
+    price_max_age_seconds: float = 180.0,
+    hourly_max_age_seconds: float = 3900.0,
+) -> dict:
+    """Fail closed unless all required histories are contiguous and fresh."""
+    requirements = {
+        "traded_price_1m": {
+            "rows_required": price_rows_required,
+            "max_age_seconds": price_max_age_seconds,
+        },
+        "mark_price_1m": {
+            "rows_required": price_rows_required,
+            "max_age_seconds": price_max_age_seconds,
+        },
+        "funding_1h": {
+            "rows_required": hourly_rows_required,
+            "max_age_seconds": hourly_max_age_seconds,
+        },
+        "open_interest_1h": {
+            "rows_required": hourly_rows_required,
+            "max_age_seconds": hourly_max_age_seconds,
+        },
+    }
+    checks = {}
+    for name, requirement in requirements.items():
+        profile = profiles.get(name, {})
+        rows = int(profile.get("trailing_contiguous_rows", 0) or 0)
+        age = profile.get("last_complete_bar_age_seconds")
+        age = float(age) if age is not None else None
+        rows_ok = rows >= requirement["rows_required"]
+        freshness_ok = age is not None and 0 <= age <= requirement["max_age_seconds"]
+        checks[name] = {
+            **requirement,
+            "trailing_contiguous_rows": rows,
+            "last_complete_bar_age_seconds": age,
+            "rows_ok": rows_ok,
+            "freshness_ok": freshness_ok,
+            "ready": rows_ok and freshness_ok,
+        }
+    return {
+        "ready": all(item["ready"] for item in checks.values()),
+        "checks": checks,
+    }
