@@ -6,6 +6,8 @@ on:
       - ".github/workflows/live-capture.yml"
       - "scripts/capture_live.py"
       - "src/dmpe/live_recorder.py"
+      - "src/dmpe/live_candles.py"
+      - "scripts/build_live_candle_dataset.py"
       - "requirements.txt"
   workflow_dispatch:
     inputs:
@@ -55,12 +57,25 @@ jobs:
           python scripts/build_live_orderflow_dataset.py \
             --input-dir data/raw/live \
             --output-dir orderflow_output/processed
+      - name: Build causally closed traded and mark candles
+        run: |
+          python scripts/build_live_candle_dataset.py \
+            --input-dir data/raw/live \
+            --output-dir candle_output/processed
       - name: Upload derived live order-flow features
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: dmpe-live-orderflow-${{ github.run_id }}
           path: orderflow_output/
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Upload finalized live candle datasets
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dmpe-live-candles-${{ github.run_id }}
+          path: candle_output/
           if-no-files-found: warn
           retention-days: 30
       - name: Upload raw live events
