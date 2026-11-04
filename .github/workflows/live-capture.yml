@@ -7,7 +7,11 @@ on:
       - "scripts/capture_live.py"
       - "src/dmpe/live_recorder.py"
       - "src/dmpe/live_candles.py"
+      - "src/dmpe/live_parity.py"
+      - "src/dmpe/delta_rest.py"
+      - "src/dmpe/orderflow.py"
       - "scripts/build_live_candle_dataset.py"
+      - "scripts/verify_live_rest_parity.py"
       - "requirements.txt"
   workflow_dispatch:
     inputs:
@@ -62,6 +66,11 @@ jobs:
           python scripts/build_live_candle_dataset.py \
             --input-dir data/raw/live \
             --output-dir candle_output/processed
+      - name: Verify live candles against REST and inspect feature warm-up
+        run: |
+          python scripts/verify_live_rest_parity.py \
+            --candle-dir candle_output/processed \
+            --output-dir parity_output/processed
       - name: Upload derived live order-flow features
         if: always()
         uses: actions/upload-artifact@v4
@@ -76,6 +85,14 @@ jobs:
         with:
           name: dmpe-live-candles-${{ github.run_id }}
           path: candle_output/
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Upload live REST parity diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dmpe-live-rest-parity-${{ github.run_id }}
+          path: parity_output/
           if-no-files-found: warn
           retention-days: 30
       - name: Upload raw live events
