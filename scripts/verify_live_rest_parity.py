@@ -12,7 +12,11 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from dmpe.delta_rest import DeltaPublicClient, filter_completed_candles  # noqa: E402
-from dmpe.live_parity import compare_candle_frames, trailing_contiguous_rows  # noqa: E402
+from dmpe.live_parity import (  # noqa: E402
+    assess_feature_warmup,
+    compare_candle_frames,
+    trailing_contiguous_rows,
+)
 
 
 def _profile(frame: pd.DataFrame, resolution: str, as_of: pd.Timestamp) -> dict:
@@ -115,13 +119,11 @@ def main() -> None:
         "mark_price_1m_contiguous_rows": 241,
         "funding_1h_contiguous_rows": 25,
         "open_interest_1h_contiguous_rows": 25,
+        "price_max_age_seconds": 180,
+        "hourly_max_age_seconds": 3900,
     }
-    warmup_ready = (
-        profiles["traded_price_1m"]["trailing_contiguous_rows"] >= 241
-        and profiles["mark_price_1m"]["trailing_contiguous_rows"] >= 241
-        and profiles["funding_1h"]["trailing_contiguous_rows"] >= 25
-        and profiles["open_interest_1h"]["trailing_contiguous_rows"] >= 25
-    )
+    warmup_assessment = assess_feature_warmup(profiles)
+    warmup_ready = warmup_assessment["ready"]
     parity_pass = all(
         result["all_live_bars_match_rest"] for result in comparisons.values()
     )
@@ -140,6 +142,7 @@ def main() -> None:
         "rest_profiles": profiles,
         "warmup_requirements": warmup_requirements,
         "feature_warmup_ready": bool(warmup_ready),
+        "feature_warmup_assessment": warmup_assessment,
         "candle_parity_pass": bool(parity_pass),
         "notes": [
             "All REST candles are filtered to source-open plus resolution plus finality delay <= as_of.",
