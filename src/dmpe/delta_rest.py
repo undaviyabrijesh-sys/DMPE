@@ -144,6 +144,41 @@ class DeltaPublicClient:
         )
 
 
+def filter_completed_candles(
+    frame: pd.DataFrame,
+    resolution: str,
+    as_of_utc: datetime | pd.Timestamp,
+    *,
+    finality_delay_seconds: int = 5,
+) -> pd.DataFrame:
+    """Remove still-forming candles using source candle-open timestamps.
+
+    Delta history timestamps denote candle OPEN. A bar is considered final
+    only when its full resolution has elapsed and the configured finality
+    delay has also passed. This is important for both 1m price bars and 1h
+    funding/open-interest bars.
+    """
+    if resolution not in RESOLUTION_SECONDS:
+        raise ValueError(f"Unsupported resolution {resolution!r}")
+    if finality_delay_seconds < 0:
+        raise ValueError("finality_delay_seconds must be non-negative")
+    if frame.empty:
+        return frame.copy()
+    if "time" not in frame:
+        raise ValueError("Candle frame must contain a 'time' column.")
+
+    as_of = pd.to_datetime(as_of_utc, utc=True, errors="coerce")
+    if pd.isna(as_of):
+        raise ValueError("as_of_utc must be a valid UTC timestamp.")
+    cutoff = as_of - pd.Timedelta(seconds=finality_delay_seconds)
+    work = frame.copy()
+    work["time"] = pd.to_datetime(work["time"], utc=True, errors="coerce")
+    candle_close = work["time"] + pd.Timedelta(seconds=RESOLUTION_SECONDS[resolution])
+    return work.loc[
+        work["time"].notna() & (candle_close <= cutoff)
+    ].sort_values("time").reset_index(drop=True)
+
+
 def utc_epoch_days_ago(days: int) -> tuple[int, int]:
     if days <= 0:
         raise ValueError("days must be a positive integer")
