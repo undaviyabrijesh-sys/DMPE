@@ -37,7 +37,7 @@ def test_l2_snapshot_calculates_spread_depth_and_microprice_pressure():
 
 def test_aggregation_timestamps_completed_minute_and_preserves_missingness():
     records = [
-        {"received_at": "2024-01-01T00:00:00.010Z", "event": {
+        {"received_at": "2024-01-01T00:00:00.000Z", "event": {
             "type": "trades", "p": "100", "s": 2, "r": "t", "t": 1704067200010000
         }},
         {"received_at": "2024-01-01T00:00:00.020Z", "event": {
@@ -48,8 +48,8 @@ def test_aggregation_timestamps_completed_minute_and_preserves_missingness():
             "b": [["99", "10"]], "a": [["101", "5"]],
             "ts": 1704067200030000,
         }},
-        {"received_at": "2024-01-01T00:02:00.010Z", "event": {
-            "type": "trades", "p": "102", "s": 4, "r": "t", "t": 1704067320010000
+        {"received_at": "2024-01-01T00:03:00.010Z", "event": {
+            "type": "trades", "p": "102", "s": 4, "r": "t", "t": 1704067380010000
         }},
     ]
     frame = aggregate_event_records(records)
@@ -63,6 +63,45 @@ def test_aggregation_timestamps_completed_minute_and_preserves_missingness():
     assert pd.isna(frame.loc[1, "trade_total_volume"])
     assert frame.loc[2, "trade_feed_observed"] == 1
     assert frame.loc[2, "l2_feed_observed"] == 0
+
+
+def test_aggregation_excludes_partial_startup_and_current_minutes():
+    start = pd.Timestamp("2024-01-01T00:00:15Z")
+    middle = pd.Timestamp("2024-01-01T00:01:10Z")
+    current = pd.Timestamp("2024-01-01T00:02:15Z")
+
+    def trade_record(received_at, event_time, price):
+        return {
+            "received_at": received_at.isoformat(),
+            "event": {
+                "type": "trades",
+                "p": str(price),
+                "s": 1,
+                "r": "t",
+                "t": event_time.value // 1000,
+            },
+        }
+
+    records = [
+        trade_record(start, start, 99),
+        trade_record(middle, middle, 100),
+        trade_record(current, current, 101),
+    ]
+    frame = aggregate_event_records(records)
+    # The first minute began before capture; the last minute is still open.
+    assert len(frame) == 1
+    assert frame.loc[0, "time"] == pd.Timestamp("2024-01-01T00:02:00Z")
+    assert frame.loc[0, "trade_count"] == 1
+    assert frame.loc[0, "trade_last_price"] == 100
+
+
+def test_aggregation_rejects_invalid_close_grace():
+    try:
+        aggregate_event_records([], close_grace_seconds=60)
+    except ValueError as exc:
+        assert "between 0 and 59" in str(exc)
+    else:
+        raise AssertionError("Expected invalid close grace to be rejected")
 
 
 def test_funding_snapshot_preserves_rate_and_exact_next_realization_time():
