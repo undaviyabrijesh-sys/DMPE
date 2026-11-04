@@ -49,7 +49,7 @@ def test_completed_candle_filter_removes_in_progress_and_grace_window():
         "volume": [10, 10, 10],
     })
     result = filter_completed_candles(
-        frame, "1m", pd.Timestamp("2024-01-01T00:02:04Z"),
+        frame, "1m", pd.Timestamp("2024-01-01T00:02:05Z"),
         finality_delay_seconds=5,
     )
     assert result["time"].tolist() == [
