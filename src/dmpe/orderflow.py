@@ -256,14 +256,44 @@ def _aggregate_book_minute(events: list[dict[str, Any]]) -> dict[str, Any]:
     return result
 
 
-def aggregate_event_records(records: Iterable[dict[str, Any]]) -> pd.DataFrame:
-    """Convert raw records to a close-timestamped 1-minute event feature grid."""
+def aggregate_event_records(
+    records: Iterable[dict[str, Any]],
+    *,
+    close_grace_seconds: int = 5,
+) -> pd.DataFrame:
+    """Build a close-timestamped event grid using a receive-time watermark.
+
+    A minute is eligible only when the recorder was already running at its open
+    and the latest received event is at least close_grace_seconds beyond its
+    close. This excludes partial startup/current minutes and allows a small
+    late-arrival window. It never stamps an in-progress minute as complete.
+    """
+    if not 0 <= close_grace_seconds <= 59:
+        raise ValueError("close_grace_seconds must be between 0 and 59")
+
+    record_list = [record for record in records if isinstance(record, dict)]
+    received_times = [
+        to_utc_timestamp(record.get("received_at"))
+        for record in record_list
+        if record.get("received_at") is not None
+    ]
+    received_times = [
+        value for value in received_times if value is not None and not pd.isna(value)
+    ]
+    first_complete_minute: pd.Timestamp | None = None
+    complete_before: pd.Timestamp | None = None
+    if received_times:
+        capture_start = min(received_times)
+        capture_end = max(received_times)
+        first_complete_minute = capture_start.ceil("min")
+        complete_before = (
+            capture_end - pd.Timedelta(seconds=close_grace_seconds)
+        ).floor("min")
+
     trades_by_minute: dict[pd.Timestamp, list[dict[str, Any]]] = defaultdict(list)
     books_by_minute: dict[pd.Timestamp, list[dict[str, Any]]] = defaultdict(list)
 
-    for record in records:
-        if not isinstance(record, dict):
-            continue
+    for record in record_list:
         event = unwrap_record(record)
         kind = str(event.get("type", "")).lower()
         if kind not in {"trades", "ob_l2"}:
@@ -272,6 +302,12 @@ def aggregate_event_records(records: Iterable[dict[str, Any]]) -> pd.DataFrame:
         if timestamp is None or pd.isna(timestamp):
             continue
         minute_open = timestamp.floor("min")
+        # Exclude the incomplete startup minute and any minute whose close has
+        # not crossed the receive-time watermark yet.
+        if first_complete_minute is not None and minute_open < first_complete_minute:
+            continue
+        if complete_before is not None and minute_open >= complete_before:
+            continue
         if kind == "trades":
             parsed = parse_trade_event(event)
             if parsed is not None:
@@ -365,7 +401,7 @@ def build_live_orderflow_dataset(
                 "m=buyer maker (sell aggressor). Other codes are unclassified."
             ),
             "orderbook": "ob_l2 snapshots aggregate top-1/5/10/15 depth imbalances and spread/microprice.",
-            "timestamps": "Event features are timestamped at the end of the minute they summarize.",
+            "timestamps": "Event features are timestamped at minute close; startup minutes are excluded and the latest minute is withheld until the receive-time watermark is at least five seconds beyond close.",
             "missingness": (
                 "No forward fill. Minutes without a trade or L2 event retain NaN measurements "
                 "and explicit feed_observed flags."
