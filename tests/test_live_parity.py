@@ -4,7 +4,11 @@ from pathlib import Path
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from dmpe.live_parity import compare_candle_frames, trailing_contiguous_rows
+from dmpe.live_parity import (
+    assess_feature_warmup,
+    compare_candle_frames,
+    trailing_contiguous_rows,
+)
 
 
 def test_live_rest_candle_parity_passes_within_tolerance():
@@ -51,3 +55,28 @@ def test_trailing_contiguous_rows_stops_at_gap():
     frame = pd.DataFrame({"time": times})
     assert trailing_contiguous_rows(frame, "1m") == 2
     assert trailing_contiguous_rows(frame, "1h") == 1
+
+
+
+def test_feature_warmup_requires_contiguous_and_fresh_sources():
+    profiles = {
+        "traded_price_1m": {"trailing_contiguous_rows": 241, "last_complete_bar_age_seconds": 90},
+        "mark_price_1m": {"trailing_contiguous_rows": 250, "last_complete_bar_age_seconds": 100},
+        "funding_1h": {"trailing_contiguous_rows": 25, "last_complete_bar_age_seconds": 3600},
+        "open_interest_1h": {"trailing_contiguous_rows": 30, "last_complete_bar_age_seconds": 3700},
+    }
+    result = assess_feature_warmup(profiles)
+    assert result["ready"] is True
+
+
+def test_feature_warmup_fails_closed_on_stale_or_short_hourly_history():
+    profiles = {
+        "traded_price_1m": {"trailing_contiguous_rows": 300, "last_complete_bar_age_seconds": 90},
+        "mark_price_1m": {"trailing_contiguous_rows": 300, "last_complete_bar_age_seconds": 90},
+        "funding_1h": {"trailing_contiguous_rows": 25, "last_complete_bar_age_seconds": 4000},
+        "open_interest_1h": {"trailing_contiguous_rows": 24, "last_complete_bar_age_seconds": 3600},
+    }
+    result = assess_feature_warmup(profiles)
+    assert result["ready"] is False
+    assert result["checks"]["funding_1h"]["freshness_ok"] is False
+    assert result["checks"]["open_interest_1h"]["rows_ok"] is False
