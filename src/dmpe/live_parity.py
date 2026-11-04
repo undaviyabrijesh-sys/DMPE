@@ -1,7 +1,6 @@
 """Compare finalized Delta WebSocket candles with REST history for the same bars."""
 from __future__ import annotations
 
-import numpy as np
 import pandas as pd
 
 
@@ -47,11 +46,13 @@ def compare_candle_frames(
     for column in columns:
         live_values = pd.to_numeric(merged[f"{column}_live"], errors="coerce")
         rest_values = pd.to_numeric(merged[f"{column}_rest"], errors="coerce")
+        missing_values = matched & (live_values.isna() | rest_values.isna())
         comparable = matched & live_values.notna() & rest_values.notna()
         allowed = absolute_tolerance + relative_tolerance * rest_values.abs()
         mismatch = comparable & ((live_values - rest_values).abs() > allowed)
         mismatch_summary[column] = {
             "compared": int(comparable.sum()),
+            "missing_values": int(missing_values.sum()),
             "mismatches": int(mismatch.sum()),
             "max_absolute_difference": (
                 float((live_values[comparable] - rest_values[comparable]).abs().max())
@@ -59,7 +60,10 @@ def compare_candle_frames(
             ),
         }
 
-    total_mismatches = sum(item["mismatches"] for item in mismatch_summary.values())
+    total_mismatches = sum(
+        item["mismatches"] + item["missing_values"]
+        for item in mismatch_summary.values()
+    )
     return {
         "live_rows": int(len(live)),
         "historical_rows": int(len(historical)),
