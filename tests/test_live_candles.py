@@ -80,7 +80,10 @@ def test_candle_builder_rejects_invalid_ohlc_and_missing_receive_times():
         100,
         high=99,
     )
-    frame, report = build_closed_candle_frame([bad], symbol="BTCUSD")
+    frame, report = build_closed_candle_frame([
+        bad,
+        {"received_at": "2024-01-01T00:02:10Z", "event": {"type": "ticker"}},
+    ], symbol="BTCUSD")
     assert frame.empty
     assert report["invalid_updates"] == 1
 
